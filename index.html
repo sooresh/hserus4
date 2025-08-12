@@ -134,7 +134,7 @@ async function fetchKlines(symbol, limit = LIMIT) {
 /* fetch shortAccount series for a futures symbol (period=1h) */
 async function fetchShortAccounts(symbol, limit = SHORT_API_LIMIT) {
   // endpoint: /futures/data/topLongShortAccountRatio
-  const url = `https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=1h&limit=${limit}`;
+  const url = `https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=${limit}`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error('longAccount fetch failed: ' + res.status);
@@ -346,3 +346,4 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
