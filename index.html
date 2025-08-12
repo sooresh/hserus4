@@ -27,33 +27,33 @@
 <body>
   <header>
     <div>
-      <h1>h serus 4</h1>
+      <h1>hserus 4</h1>
       <div class="small">hserus 4</div>
     </div>
 
     <div class="controls">
       <label class="small">Sort:
         <select id="sortSelect" title="Choose sort column & order">
-          <option value="rsiDiff_desc">RSI Diff ↓ (default)</option>
-          <option value="rsiDiff_asc">RSI Diff ↑</option>
+          <option value="shortDiff_desc">shortDiff ↓ (default)</option>
+          <option value="shortDiff_asc">shortDiff ↑</option>
 
-          <option value="prevClose_desc">Prev Close % ↓</option>
-          <option value="prevClose_asc">Prev Close % ↑</option>
+          <option value="prevClosePct_desc">Prev Close % ↓</option>
+          <option value="prevClosePct_asc">Prev Close % ↑</option>
 
-          <option value="currClose_desc">Curr Close % ↓</option>
-          <option value="currClose_asc">Curr Close % ↑</option>
+          <option value="currClosePct_desc">Curr Close % ↓</option>
+          <option value="currClosePct_asc">Curr Close % ↑</option>
 
-          <option value="currVol_desc">Curr Vol % ↓</option>
-          <option value="currVol_asc">Curr Vol % ↑</option>
+          <option value="currVolPct_desc">Curr Vol % ↓</option>
+          <option value="currVolPct_asc">Curr Vol % ↑</option>
 
-          <option value="prevVol_desc">Prev Vol % ↓</option>
-          <option value="prevVol_asc">Prev Vol % ↑</option>
+          <option value="prevVolPct_desc">Prev Vol % ↓</option>
+          <option value="prevVolPct_asc">Prev Vol % ↑</option>
 
-          <option value="currRsiPct_desc">Curr RSI % ↓</option>
-          <option value="currRsiPct_asc">Curr RSI % ↑</option>
+          <option value="currShortPct_desc">Curr Short % ↓</option>
+          <option value="currShortPct_asc">Curr Short % ↑</option>
 
-          <option value="prevRsiPct_desc">Prev RSI % ↓</option>
-          <option value="prevRsiPct_asc">Prev RSI % ↑</option>
+          <option value="prevShortPct_desc">Prev Short % ↓</option>
+          <option value="prevShortPct_asc">Prev Short % ↑</option>
         </select>
       </label>
 
@@ -71,37 +71,35 @@
           <th>Curr Close %</th>
           <th>Curr Vol %</th>
           <th>Prev Vol %</th>
-          <th>Curr RSI %</th>
-          <th>Prev RSI %</th>
-          <th>RSI Diff</th>
+          <th>Curr Short %</th>
+          <th>Prev Short %</th>
+          <th>shortDiff</th>
         </tr>
       </thead>
       <tbody id="resultsBody">
-        <tr><td colspan="8" class="small">Click <strong>Refresh Data</strong> to start scan</td></tr>
+        <tr><td colspan="8" class="small">Click <strong>Refresh Data</strong> or reload page to start scan</td></tr>
       </tbody>
     </table>
   </main>
 
 <script>
-/*
-  hserus
-*/
+/* F */
 
-const LIMIT = 10;             // candles per symbol
+/* ---------- Config ---------- */
+const LIMIT = 10;           // candles to fetch per symbol (we need at least 4; 40 is safe)
 const INTERVAL = '1h';
-const MAX_SYMBOLS = 200;
-const INDICATOR_PERIOD = 6;   // change this to edit indicator period easily
+const MAX_SYMBOLS = 200;    // top N symbols to scan
+const SHORT_API_LIMIT = 5;  // number of shortAccount entries to fetch (we need at least 3)
 const EXCLUDE = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TONUSDT","AVAXUSDT","DOTUSDT","TRXUSDT","SHIBUSDT","LINKUSDT","NEARUSDT","MATICUSDT","LTCUSDT","UNIUSDT","BCHUSDT","ICPUSDT","LEOUSDT"];
 
 const statusEl = document.getElementById('status');
 const resultsBody = document.getElementById('resultsBody');
 const refreshBtn = document.getElementById('refreshBtn');
 const sortSelect = document.getElementById('sortSelect');
-const FUTURES_API_RATIO = "https://fapi.binance.com/fapi/v1/topLongShortPositionRatio";
 
-let results = [];   // array of matched rows (objects)
+let results = []; // live matches
 
-/* ----------------- Network helpers ----------------- */
+/* ---------- Network helpers ---------- */
 async function fetchPerpetualSymbols() {
   const url = 'https://fapi.binance.com/fapi/v1/exchangeInfo';
   const r = await fetch(url);
@@ -124,55 +122,46 @@ async function fetchTopSymbols(limit = MAX_SYMBOLS) {
     .map(t => t.symbol);
 }
 
-async function fetchKlines(symbol) {
-  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${INTERVAL}&limit=${LIMIT}`;
+/* fetch klines (futures) */
+async function fetchKlines(symbol, limit = LIMIT) {
+  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${INTERVAL}&limit=${limit}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error('klines failed for ' + symbol);
+  if (!res.ok) throw new Error('klines failed for ' + symbol + ' : ' + res.status);
   const raw = await res.json();
   return raw.map(r => ({ open:+r[1], high:+r[2], low:+r[3], close:+r[4], volume:+r[5] }));
 }
 
-/* ----------------- Indicator (modular) -----------------
-   hserus
-*/
-async function gethserusratio(symbol) {
-  const fetchLimit = 20;
-  const url = `${FUTURES_API_RATIO}?symbol=${symbol}&period=${INTERVAL}&limit=${fetchLimit}`;
-
+/* fetch shortAccount series for a futures symbol (period=1h) */
+async function fetchShortAccounts(symbol, limit = SHORT_API_LIMIT) {
+  // endpoint: /futures/data/topLongShortAccountRatio
+  const url = `https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=1h&limit=${limit}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch ratio for ${symbol}: ${res.statusText}`);
-    }
-
-    const ratioData = await res.json();
-    return ratioData.map(item => parseFloat(item.longAccount) * 100).slice(-LIMIT);
-
+    if (!res.ok) throw new Error('longAccount fetch failed: ' + res.status);
+    const arr = await res.json();
+    // arr ordered oldest->newest? Binance returns newest-last typically in ascending timestamp; to be safe map to numeric
+    // pick the last `limit` and map shortAccount to float
+    return arr.map(x => (x && x.longAccount != null) ? parseFloat(x.longAccount) : null);
   } catch (e) {
-    console.warn(e.message);
-    return Array(LIMIT).fill(null);
+    console.warn('fetchLongAccounts error', symbol, e.message || e);
+    return Array(limit).fill(null);
   }
 }
 
-async function calculateIndicator(symbol) {
-  return await gethserusratio(symbol);
-}
-
-
-/* ----------------- Utility math helpers ----------------- */
+/* ---------- Utility helpers ---------- */
 function pctChange(prev, cur) {
   if (prev === 0 || prev === null || prev === undefined) return NaN;
   return ((cur - prev) / prev) * 100;
 }
+function isDoji(candle) { return candle.close === candle.open; }
 
-/* Sorting helpers */
+/* Sorting utility */
 function sortResults(list, sortKey) {
-  const [key, order] = sortKey.split('_'); // e.g. rsiDiff_desc
-  const multiplier = order === 'asc' ? 1 : -1;
+  const [key, order] = sortKey.split('_'); // e.g. shortDiff_desc
+  const multiplier = (order === 'asc') ? 1 : -1;
   return list.sort((a,b) => {
     const va = (key in a) ? a[key] : NaN;
     const vb = (key in b) ? b[key] : NaN;
-    // treat NaN as very small
     if (isNaN(va) && isNaN(vb)) return 0;
     if (isNaN(va)) return 1 * multiplier;
     if (isNaN(vb)) return -1 * multiplier;
@@ -180,32 +169,30 @@ function sortResults(list, sortKey) {
   });
 }
 
-/* ----------------- Rendering ----------------- */
-function formatNum(x, digits=2) {
+/* ---------- Rendering ---------- */
+function formatPct(x, digits=2) {
   if (x === null || x === undefined || isNaN(x)) return '—';
-  return Number(x).toFixed(digits) + (digits===2 && typeof x === 'number' && Math.abs(x) < 0.01 ? '' : '');
+  return x.toFixed(digits) + '%';
 }
 
 function appendRow(obj) {
-  // If current sort is default (rsiDiff_desc), we append live to show matches as they appear.
-  // If user selected another sort, re-render sorted list to keep ordering consistent.
   const currentSort = sortSelect.value;
-  if (currentSort === 'rsiDiff_desc') {
+  if (currentSort === 'shortDiff_desc') {
     const tr = document.createElement('tr');
     tr.className = 'match';
     tr.innerHTML = `
       <td><strong>${obj.symbol}</strong></td>
-      <td>${isNaN(obj.prevClosePct) ? '—' : obj.prevClosePct.toFixed(2) + '%'}</td>
-      <td>${isNaN(obj.currClosePct) ? '—' : obj.currClosePct.toFixed(2) + '%'}</td>
-      <td>${isNaN(obj.currVolPct) ? '—' : obj.currVolPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(obj.prevVolPct) ? '—' : obj.prevVolPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(obj.currRsiPct) ? '—' : obj.currRsiPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(obj.prevRsiPct) ? '—' : obj.prevRsiPct.toFixed(2) + '%'}</td>
-      <td class="${obj.rsiDiff>=0 ? 'green' : 'red'}">${isNaN(obj.rsiDiff) ? '—' : obj.rsiDiff.toFixed(4)}</td>
+      <td>${formatPct(obj.prevClosePct)}</td>
+      <td>${formatPct(obj.currClosePct)}</td>
+      <td>${formatPct(obj.currVolPct)}</td>
+      <td>${formatPct(obj.prevVolPct)}</td>
+      <td>${formatPct(obj.currShortPct)}</td>
+      <td>${formatPct(obj.prevShortPct)}</td>
+      <td class="${obj.shortDiff>=0 ? 'green' : 'red'}">${(isNaN(obj.shortDiff) ? '—' : obj.shortDiff.toFixed(6))}</td>
     `;
     resultsBody.appendChild(tr);
   } else {
-    renderTable(); // full render in sorted order
+    renderTable();
   }
 }
 
@@ -223,61 +210,70 @@ function renderTable() {
     tr.className = 'match';
     tr.innerHTML = `
       <td><strong>${r.symbol}</strong></td>
-      <td>${isNaN(r.prevClosePct) ? '—' : r.prevClosePct.toFixed(2) + '%'}</td>
-      <td>${isNaN(r.currClosePct) ? '—' : r.currClosePct.toFixed(2) + '%'}</td>
-      <td>${isNaN(r.currVolPct) ? '—' : r.currVolPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(r.prevVolPct) ? '—' : r.prevVolPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(r.currRsiPct) ? '—' : r.currRsiPct.toFixed(2) + '%'}</td>
-      <td>${isNaN(r.prevRsiPct) ? '—' : r.prevRsiPct.toFixed(2) + '%'}</td>
-      <td class="${r.rsiDiff>=0 ? 'green' : 'red'}">${isNaN(r.rsiDiff) ? '—' : r.rsiDiff.toFixed(4)}</td>
+      <td>${formatPct(r.prevClosePct)}</td>
+      <td>${formatPct(r.currClosePct)}</td>
+      <td>${formatPct(r.currVolPct)}</td>
+      <td>${formatPct(r.prevVolPct)}</td>
+      <td>${formatPct(r.currShortPct)}</td>
+      <td>${formatPct(r.prevShortPct)}</td>
+      <td class="${r.shortDiff>=0 ? 'green' : 'red'}">${(isNaN(r.shortDiff) ? '—' : r.shortDiff.toFixed(6))}</td>
     `;
     resultsBody.appendChild(tr);
   }
 }
 
-/* ----------------- Core matching logic -----------------
-   Conditions required (as you defined earlier):
-   1) current volume > prev volume
-   2) if current close is down (red) then currentIndicator > prevIndicator (indicator increasing)
-      if current close is up (green) then currentIndicator < prevIndicator (indicator decreasing)
-   3) abs(current close % change) >= 2 * abs(prev close % change)
-*/
-function checkConditionsAndBuildObject(symbol, klines, indicatorArr) {
-  const n = klines.length;
-  if (n < 4) return null;
+/* ---------- Core matching logic ---------- */
+/* indicator retrieval wrapper - makes swapping easy if you want later */
+async function getShortAccountsForSymbol(symbol) {
+  // returns array of floats (length = SHORT_API_LIMIT), order preserved from response
+  // We expect at minimum 3 meaningful entries; if not available, elements may be null.
+  return await fetchShortAccounts(symbol, SHORT_API_LIMIT);
+}
 
+function checkConditionsAndBuildObject(symbol, klines, shortArr) {
+  const n = klines.length;
+  if (n < 4) return null; // need at least 4 candles to compute prev/cur % changes
+
+  // ensure we have at least 3 shortAccount values (we'll use last 3)
+  if (!shortArr || shortArr.length < 3) return null;
+
+  // take last 3 short entries
+  const lastShort = shortArr[shortArr.length - 1];
+  const prevShort = shortArr[shortArr.length - 2];
+  const prevPrevShort = shortArr[shortArr.length - 3];
+
+  if (lastShort === null || prevShort === null || prevPrevShort === null) return null;
+
+  // closes & volumes arrays (oldest->newest)
   const closes = klines.map(k => k.close);
   const vols = klines.map(k => k.volume);
-
-  const ind_len = indicatorArr.length;
-  const ind_now = indicatorArr[ind_len - 1];
-  const ind_prev = indicatorArr[ind_len - 2];
-  const ind_prevPrev = indicatorArr[ind_len - 3];
-
-  if (ind_now === null || ind_prev === null || ind_prevPrev === null) return null;
 
   const lastClose = closes[n-1], prevClose = closes[n-2], prev2Close = closes[n-3];
   const lastVol = vols[n-1], prevVol = vols[n-2], prev2Vol = vols[n-3];
 
+  // 1) current volume > prev volume
   if (!(lastVol > prevVol)) return null;
 
+  // 2) direction vs shortAccount:
   const isGreen = lastClose > prevClose;
   const isRed = lastClose < prevClose;
-  if (!(isGreen || isRed)) return null;
+  if (!(isGreen || isRed)) return null; // ignore doji
 
-  if (isRed && !(ind_now > ind_prev)) return null;
-  if (isGreen && !(ind_now < ind_prev)) return null;
+  if (isRed && !(lastShort > prevShort)) return null;    // shorts must be increasing
+  if (isGreen && !(lastShort < prevShort)) return null;  // shorts must be decreasing
 
+  // 3) magnitude: abs(curr short % change) >= 2 * abs(prev short % change)
+  const currShortPct = pctChange(prevShort, lastShort);
+  const prevShortPct = pctChange(prevPrevShort, prevShort);
+  if (!(Math.abs(currShortPct) >= 2 * Math.abs(prevShortPct))) return null;
+
+  // compute other output columns:
   const currClosePct = pctChange(prevClose, lastClose);
   const prevClosePct = pctChange(prev2Close, prevClose);
-  if (!(Math.abs(currClosePct) >= 2 * Math.abs(prevClosePct))) return null;
-
   const currVolPct = pctChange(prevVol, lastVol);
   const prevVolPct = pctChange(prev2Vol, prevVol);
 
-  const currIndPct = ind_prev !== 0 ? ((ind_now - ind_prev) / Math.abs(ind_prev)) * 100 : NaN;
-  const prevIndPct = ind_prevPrev !== 0 ? ((ind_prev - ind_prevPrev) / Math.abs(ind_prevPrev)) * 100 : NaN;
-  const rsiDiff = ind_now - ind_prev;
+  const shortDiff = lastShort - prevShort;
 
   return {
     symbol,
@@ -285,12 +281,13 @@ function checkConditionsAndBuildObject(symbol, klines, indicatorArr) {
     currClosePct,
     currVolPct,
     prevVolPct,
-    currRsiPct: currIndPct,
-    prevRsiPct: prevIndPct,
-    rsiDiff
+    currShortPct,
+    prevShortPct,
+    shortDiff
   };
 }
 
+/* ---------- Main scan loop ---------- */
 async function runScan() {
   try {
     results = [];
@@ -306,19 +303,23 @@ async function runScan() {
       statusEl.textContent = `Scanning ${i} / ${symbols.length}: ${sym}`;
       try {
         const klines = await fetchKlines(sym);
-        const indicatorArr = await calculateIndicator(sym); // await here
-        const matchObj = checkConditionsAndBuildObject(sym, klines, indicatorArr);
+        // fetch shortAccount series for symbol
+        const shortArr = await getShortAccountsForSymbol(sym); // array of shortAccount floats
+        const matchObj = checkConditionsAndBuildObject(sym, klines, shortArr);
         if (matchObj) {
           results.push(matchObj);
-          appendRow(matchObj);
+          appendRow(matchObj); // live append
         }
       } catch (e) {
-        // ignore and continue
+        // ignore symbol-level errors and continue
+        //console.warn('err', sym, e);
       }
-      await sleep(90);
+      // small delay so UI can update and to be polite
+      await sleep(120);
     }
 
     statusEl.textContent = `Scan complete — found ${results.length} matches.`;
+    // final render (sorted according to dropdown)
     renderTable();
   } catch (err) {
     console.error(err);
@@ -328,21 +329,20 @@ async function runScan() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-/* ----------------- Wiring ----------------- */
+/* ---------- Wiring ---------- */
 refreshBtn.addEventListener('click', () => {
   refreshBtn.disabled = true;
-  resultsBody.innerHTML = '<tr><td colspan="8" class="small">Starting scan... (this may take 10-40s)</td></tr>';
+  resultsBody.innerHTML = '<tr><td colspan="8" class="small">Starting scan... (this may take 20-60s)</td></tr>';
   runScan().finally(() => { refreshBtn.disabled = false; });
 });
 
-sortSelect.addEventListener('change', () => {
-  // re-render sorted table when user changes sort
-  renderTable();
+sortSelect.addEventListener('change', () => { renderTable(); });
+
+/* Auto-run on page load (so page refresh triggers a scan). If you don't want auto-run, comment this line out. */
+window.addEventListener('load', () => {
+  // start a scan automatically on page load
+  refreshBtn.click();
 });
-
-/* No auto-run — manual only as requested */
-
 </script>
 </body>
-
 </html>
