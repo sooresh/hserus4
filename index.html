@@ -1,349 +1,373 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>hserus 4</title>
-  <style>
-    :root{--bg:#071827;--card:#0b2430;--muted:#9fb6c7;--accent:#7be3c7;--danger:#ff9a9a}
-    body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(#021119,#051521);color:#e6f3f6;padding:14px}
-    header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center}
-    h1{font-size:18px;margin:0}
-    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    select,button{padding:8px;border-radius:8px;border:1px solid #12333d;background:var(--card);color:inherit}
-    button{cursor:pointer}
-    #status{font-size:13px;color:var(--muted)}
-    main{margin-top:12px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th,td{text-align:left;padding:10px;border-bottom:1px solid rgba(255,255,255,0.04)}
-    th{color:var(--muted);font-size:12px}
-    tr.match{background:linear-gradient(90deg, rgba(11,36,48,0.6), rgba(6,28,36,0.4))}
-    .small{font-size:12px;color:var(--muted)}
-    .green{color:#7be3c7}
-    .red{color:#ff9a9a}
-    @media(max-width:720px){ th,td{padding:8px;font-size:12px} h1{font-size:16px} }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>hserus 4</title>
+<style>
+:root{
+  --bg:#071827; --card:#0b2430; --muted:#9fb6c7; --accent:#7be3c7; --danger:#ff9a9a;
+  --table-bg: #0b2430;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,Arial,Helvetica,sans-serif;background:linear-gradient(#021119,#051521);color:#e6f3f6;padding:16px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center}
+h1{font-size:18px;margin:0}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,button{padding:8px;border-radius:8px;border:1px solid #12333d;background:var(--card);color:inherit}
+button{cursor:pointer}
+#status{font-size:13px;color:var(--muted)}
+main{margin-top:12px}
+.tablewrap{overflow:auto;border:1px solid rgba(255,255,255,0.03);border-radius:10px;background:rgba(0,0,0,0.1)}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:1000px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid rgba(255,255,255,0.04)}
+th{color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap}
+tr.match{background:linear-gradient(90deg, rgba(11,36,48,0.6), rgba(6,28,36,0.4))}
+.small{font-size:12px;color:var(--muted)}
+.green{color:#7be3c7}
+.red{color:#ff9a9a}
+.tag{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px}
+.tag.up{background:rgba(123,227,199,0.12);color:var(--accent)}
+.tag.down{background:rgba(255,154,154,0.08);color:var(--danger)}
+.center{ text-align:center }
+@media(max-width:800px){ table{min-width:900px} th,td{padding:8px} h1{font-size:16px} }
+</style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>hserus 4</h1>
-      <div class="small">hserus 4</div>
-    </div>
+<header>
+  <div>
+    <h1>hserus4</h1>
+    <div class="small">hserus4</div>
+  </div>
 
-    <div class="controls">
-      <label class="small">Sort:
-        <select id="sortSelect" title="Choose sort column & order">
-          <option value="shortDiff_desc">shortDiff ↓ (default)</option>
-          <option value="shortDiff_asc">shortDiff ↑</option>
+  <div class="controls">
+    <label class="small">Sort:
+      <select id="sortSelect" title="Choose sort column & order">
+        <option value="symbol_asc">Symbol ↑</option>
+        <option value="symbol_desc">Symbol ↓</option>
 
-          <option value="prevClosePct_desc">Prev Close % ↓</option>
-          <option value="prevClosePct_asc">Prev Close % ↑</option>
+        <option value="closePct_desc">Close % ↓</option>
+        <option value="closePct_asc">Close % ↑</option>
 
-          <option value="currClosePct_desc">Curr Close % ↓</option>
-          <option value="currClosePct_asc">Curr Close % ↑</option>
+        <option value="volPct_desc">Vol % ↓</option>
+        <option value="volPct_asc">Vol % ↑</option>
 
-          <option value="currVolPct_desc">Curr Vol % ↓</option>
-          <option value="currVolPct_asc">Curr Vol % ↑</option>
+        <option value="bbSameDir_desc">BB Same Dir ↓</option>
+        <option value="bbSameDir_asc">BB Same Dir ↑</option>
 
-          <option value="prevVolPct_desc">Prev Vol % ↓</option>
-          <option value="prevVolPct_asc">Prev Vol % ↑</option>
+        <option value="distPct_desc">Dist % ↓</option>
+        <option value="distPct_asc">Dist % ↑</option>
 
-          <option value="currShortPct_desc">Curr Short % ↓</option>
-          <option value="currShortPct_asc">Curr Short % ↑</option>
+        <option value="closeVsMiddle_desc">Close vs Mid ↓</option>
+        <option value="closeVsMiddle_asc">Close vs Mid ↑</option>
 
-          <option value="prevShortPct_desc">Prev Short % ↓</option>
-          <option value="prevShortPct_asc">Prev Short % ↑</option>
-        </select>
-      </label>
+        <option value="bbHighest_desc">BB Highest Change ↓</option>
+        <option value="bbHighest_asc">BB Highest Change ↑</option>
 
-      <button id="refreshBtn">Refresh Data</button>
-      <div id="status">Idle</div>
-    </div>
-  </header>
+        <option value="prevColor_desc">Prev Color ↓</option>
+        <option value="prevColor_asc">Prev Color ↑</option>
+      </select>
+    </label>
 
-  <main>
+    <button id="refreshBtn">Refresh Data</button>
+    <div id="status">Idle</div>
+  </div>
+</header>
+
+<main>
+  <div class="tablewrap">
     <table aria-live="polite">
       <thead>
         <tr>
           <th>Symbol</th>
-          <th>Prev Close %</th>
-          <th>Curr Close %</th>
-          <th>Curr Vol %</th>
-          <th>Prev Vol %</th>
-          <th>Curr Short %</th>
-          <th>Prev Short %</th>
-          <th>shortDiff</th>
+          <th>Close %</th>
+          <th>Vol % (vs prev)</th>
+          <th class="center">BBs same direction?</th>
+          <th>Dist from BB (%)</th>
+          <th>Close vs Middle</th>
+          <th>BB highest rate</th>
+          <th>Prev candle</th>
         </tr>
       </thead>
       <tbody id="resultsBody">
-        <tr><td colspan="8" class="small">Click <strong>Refresh Data</strong> or reload page to start scan</td></tr>
+        <tr><td colspan="8" class="small">Click <strong>Refresh Data</strong> to start scan.</td></tr>
       </tbody>
     </table>
-  </main>
+  </div>
+</main>
 
 <script>
-/* F */
+/* Config */
+const API_KLINES = 'https://fapi.binance.com/fapi/v1/klines';
+const API_EXCHANGEINFO = 'https://fapi.binance.com/fapi/v1/exchangeInfo';
+const API_TICKER24H = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
 
-/* ---------- Config ---------- */
-const LIMIT = 10;           // candles to fetch per symbol (we need at least 4; 40 is safe)
-const INTERVAL = '1h';
-const MAX_SYMBOLS = 200;    // top N symbols to scan
-const SHORT_API_LIMIT = 5;  // number of shortAccount entries to fetch (we need at least 3)
-const EXCLUDE = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TONUSDT","AVAXUSDT","DOTUSDT","TRXUSDT","SHIBUSDT","LINKUSDT","NEARUSDT","MATICUSDT","LTCUSDT","UNIUSDT","BCHUSDT","ICPUSDT","LEOUSDT"];
+const EXCLUDE_TOP20 = [
+  'BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','TONUSDT','AVAXUSDT','DOTUSDT',
+  'TRXUSDT','SHIBUSDT','LINKUSDT','BCHUSDT','NEARUSDT','MATICUSDT','LTCUSDT','ICPUSDT','UNIUSDT','ETCUSDT'
+];
 
+const MAX_SYMBOLS = 200;
+const KLINES_LIMIT = 25;   // enough to compute SMA20+BB
+const SMA_PERIOD = 20;
+const PAUSE_MS = 110;      // pause between requests to reduce risk of rate-limits
+
+/* DOM */
 const statusEl = document.getElementById('status');
 const resultsBody = document.getElementById('resultsBody');
 const refreshBtn = document.getElementById('refreshBtn');
 const sortSelect = document.getElementById('sortSelect');
 
-let results = []; // live matches
+let results = [];
 
-/* ---------- Network helpers ---------- */
-async function fetchPerpetualSymbols() {
-  const url = 'https://fapi.binance.com/fapi/v1/exchangeInfo';
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('exchangeInfo failed');
-  const data = await r.json();
-  return data.symbols
-    .filter(s => s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT') && !EXCLUDE.includes(s.symbol))
-    .map(s => s.symbol);
+/* Helpers */
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function pctChange(prev, cur){ if(prev==null||prev===0||cur==null) return NaN; return ((cur - prev) / prev) * 100; }
+function toPctText(v){ return (isNaN(v)?'—':(v>=0?'+':'') + v.toFixed(2) + '%'); }
+function numOrNaN(x){ return (x==null||isNaN(x)) ? NaN : Number(x); }
+
+/* Bollinger calculator */
+function calcBollinger(closes, period=SMA_PERIOD, mult=2){
+  const sma = [], upper = [], lower = [];
+  for(let i=0;i<closes.length;i++){
+    if(i < period-1){ sma.push(null); upper.push(null); lower.push(null); continue; }
+    const slice = closes.slice(i-period+1, i+1);
+    const mean = slice.reduce((a,b)=>a+b,0)/period;
+    const variance = slice.reduce((a,b)=>a+(b-mean)*(b-mean),0)/period;
+    const stdev = Math.sqrt(variance);
+    sma.push(mean);
+    upper.push(mean + mult*stdev);
+    lower.push(mean - mult*stdev);
+  }
+  return { sma, upper, lower };
 }
 
-async function fetchTopSymbols(limit = MAX_SYMBOLS) {
-  const url = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
-  const [tickRes, perpSymbols] = await Promise.all([fetch(url), fetchPerpetualSymbols()]);
-  if (!tickRes.ok) throw new Error('ticker24hr failed');
+/* Fetch universe: top 200 perpetual USDT (exclude top20) */
+async function fetchTop200Symbols(){
+  statusEl.textContent = 'Fetching universe...';
+  const [infoRes, tickRes] = await Promise.all([fetch(API_EXCHANGEINFO), fetch(API_TICKER24H)]);
+  if(!infoRes.ok || !tickRes.ok) throw new Error('Failed to fetch exchange info or tickers');
+  const info = await infoRes.json();
   const tick = await tickRes.json();
-  return tick
-    .filter(t => t.symbol.endsWith('USDT') && perpSymbols.includes(t.symbol))
-    .sort((a,b) => Math.abs(parseFloat(b.priceChangePercent || 0)) - Math.abs(parseFloat(a.priceChangePercent || 0)))
-    .slice(0, limit)
-    .map(t => t.symbol);
+
+  const perpSymbols = info.symbols.filter(s => s.contractType==='PERPETUAL' && s.symbol.endsWith('USDT')).map(s=>s.symbol);
+
+  const filteredTick = tick.filter(t => perpSymbols.includes(t.symbol) && !EXCLUDE_TOP20.includes(t.symbol) && t.symbol.endsWith('USDT'));
+
+  const sorted = filteredTick.sort((a,b) => parseFloat(b.quoteVolume || 0) - parseFloat(a.quoteVolume || 0));
+  const top = sorted.slice(0, MAX_SYMBOLS).map(x => x.symbol);
+  return top;
 }
 
-/* fetch klines (futures) */
-async function fetchKlines(symbol, limit = LIMIT) {
-  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${INTERVAL}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('klines failed for ' + symbol + ' : ' + res.status);
-  const raw = await res.json();
-  return raw.map(r => ({ open:+r[1], high:+r[2], low:+r[3], close:+r[4], volume:+r[5] }));
+/* Fetch klines (1h) and return array of objects (oldest->newest) */
+async function fetchKlines(symbol, limit=KLINES_LIMIT){
+  const url = `${API_KLINES}?symbol=${symbol}&interval=1h&limit=${limit}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('Klines failed for ' + symbol);
+  const raw = await r.json();
+  return raw.map(r => ({
+    time: r[0],
+    open: +r[1],
+    high: +r[2],
+    low: +r[3],
+    close: +r[4],
+    volume: +r[5]
+  }));
 }
 
-/* fetch shortAccount series for a futures symbol (period=1h) */
-async function fetchShortAccounts(symbol, limit = SHORT_API_LIMIT) {
-  // endpoint: /futures/data/topLongShortAccountRatio
-  const url = `https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=${limit}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('longAccount fetch failed: ' + res.status);
-    const arr = await res.json();
-    // arr ordered oldest->newest? Binance returns newest-last typically in ascending timestamp; to be safe map to numeric
-    // pick the last `limit` and map shortAccount to float
-    return arr.map(x => (x && x.longAccount != null) ? parseFloat(x.longAccount) : null);
-  } catch (e) {
-    console.warn('fetchLongAccounts error', symbol, e.message || e);
-    return Array(limit).fill(null);
-  }
-}
-
-/* ---------- Utility helpers ---------- */
-function pctChange(prev, cur) {
-  if (prev === 0 || prev === null || prev === undefined) return NaN;
-  return ((cur - prev) / prev) * 100;
-}
-function isDoji(candle) { return candle.close === candle.open; }
-
-/* Sorting utility */
-function sortResults(list, sortKey) {
-  const [key, order] = sortKey.split('_'); // e.g. shortDiff_desc
-  const multiplier = (order === 'asc') ? 1 : -1;
-  return list.sort((a,b) => {
-    const va = (key in a) ? a[key] : NaN;
-    const vb = (key in b) ? b[key] : NaN;
-    if (isNaN(va) && isNaN(vb)) return 0;
-    if (isNaN(va)) return 1 * multiplier;
-    if (isNaN(vb)) return -1 * multiplier;
-    return (va - vb) * multiplier;
-  });
-}
-
-/* ---------- Rendering ---------- */
-function formatPct(x, digits=2) {
-  if (x === null || x === undefined || isNaN(x)) return '—';
-  return x.toFixed(digits) + '%';
-}
-
-function appendRow(obj) {
-  const currentSort = sortSelect.value;
-  if (currentSort === 'shortDiff_desc') {
-    const tr = document.createElement('tr');
-    tr.className = 'match';
-    tr.innerHTML = `
-      <td><strong>${obj.symbol}</strong></td>
-      <td>${formatPct(obj.prevClosePct)}</td>
-      <td>${formatPct(obj.currClosePct)}</td>
-      <td>${formatPct(obj.currVolPct)}</td>
-      <td>${formatPct(obj.prevVolPct)}</td>
-      <td>${formatPct(obj.currShortPct)}</td>
-      <td>${formatPct(obj.prevShortPct)}</td>
-      <td class="${obj.shortDiff>=0 ? 'green' : 'red'}">${(isNaN(obj.shortDiff) ? '—' : obj.shortDiff.toFixed(6))}</td>
-    `;
-    resultsBody.appendChild(tr);
-  } else {
-    renderTable();
-  }
-}
-
-function renderTable() {
-  const sel = sortSelect.value;
-  const cloned = [...results];
-  const sorted = sortResults(cloned, sel);
-  resultsBody.innerHTML = '';
-  if (sorted.length === 0) {
-    resultsBody.innerHTML = '<tr><td colspan="8" class="small">No matches found.</td></tr>';
-    return;
-  }
-  for (const r of sorted) {
-    const tr = document.createElement('tr');
-    tr.className = 'match';
-    tr.innerHTML = `
-      <td><strong>${r.symbol}</strong></td>
-      <td>${formatPct(r.prevClosePct)}</td>
-      <td>${formatPct(r.currClosePct)}</td>
-      <td>${formatPct(r.currVolPct)}</td>
-      <td>${formatPct(r.prevVolPct)}</td>
-      <td>${formatPct(r.currShortPct)}</td>
-      <td>${formatPct(r.prevShortPct)}</td>
-      <td class="${r.shortDiff>=0 ? 'green' : 'red'}">${(isNaN(r.shortDiff) ? '—' : r.shortDiff.toFixed(6))}</td>
-    `;
-    resultsBody.appendChild(tr);
-  }
-}
-
-/* ---------- Core matching logic ---------- */
-/* indicator retrieval wrapper - makes swapping easy if you want later */
-async function getShortAccountsForSymbol(symbol) {
-  // returns array of floats (length = SHORT_API_LIMIT), order preserved from response
-  // We expect at minimum 3 meaningful entries; if not available, elements may be null.
-  return await fetchShortAccounts(symbol, SHORT_API_LIMIT);
-}
-
-function checkConditionsAndBuildObject(symbol, klines, shortArr) {
+/* Evaluate symbol conditions and return object for table if pass */
+function evaluateSymbol(symbol, klines){
+  if(!klines || klines.length < SMA_PERIOD + 2) return null;
   const n = klines.length;
-  if (n < 4) return null; // need at least 4 candles to compute prev/cur % changes
+  const last = klines[n-1];
+  const prev = klines[n-2];
 
-  // ensure we have at least 3 shortAccount values (we'll use last 3)
-  if (!shortArr || shortArr.length < 3) return null;
+  // 1) precheck: current volume > prev volume
+  if(!(last.volume > prev.volume)) return null;
 
-  // take last 3 short entries
-  const lastShort = shortArr[shortArr.length - 1];
-  const prevShort = shortArr[shortArr.length - 2];
-  const prevPrevShort = shortArr[shortArr.length - 3];
-
-  if (lastShort === null || prevShort === null || prevPrevShort === null) return null;
-
-  // closes & volumes arrays (oldest->newest)
+  // Extract arrays for BB calculation
   const closes = klines.map(k => k.close);
-  const vols = klines.map(k => k.volume);
+  const { sma, upper, lower } = calcBollinger(closes);
 
-  const lastClose = closes[n-1], prevClose = closes[n-2], prev2Close = closes[n-3];
-  const lastVol = vols[n-1], prevVol = vols[n-2], prev2Vol = vols[n-3];
+  // require BBs available for prev and last
+  const upper_now = upper[n-1], upper_prev = upper[n-2];
+  const lower_now = lower[n-1], lower_prev = lower[n-2];
+  const sma_now = sma[n-1], sma_prev = sma[n-2];
 
-  // 1) current volume > prev volume
-  if (!(lastVol > prevVol)) return null;
+  if([upper_now, upper_prev, lower_now, lower_prev, sma_now, sma_prev].some(v => v==null || isNaN(v))) return null;
 
-  // 2) direction vs shortAccount:
-  const isGreen = lastClose > prevClose;
-  const isRed = lastClose < prevClose;
-  if (!(isGreen || isRed)) return null; // ignore doji
+  // Candle colors
+  const currGreen = last.close > last.open;
+  const currRed = last.close < last.open;
+  // ignore doji for this scanner
+  if(!currGreen && !currRed) return null;
 
-  if (isRed && !(lastShort > prevShort)) return null;    // shorts must be increasing
-  if (isGreen && !(lastShort < prevShort)) return null;  // shorts must be decreasing
+  // 2) direction rules:
+  // If current green -> require upper_now < upper_prev (upper decreasing)
+  // If current red   -> require lower_now > lower_prev (lower increasing)
+  if(currGreen && !(upper_now < upper_prev)) return null;
+  if(currRed && !(lower_now > lower_prev)) return null;
 
-  // 3) magnitude: abs(curr short % change) >= 2 * abs(prev short % change)
-  const currShortPct = pctChange(prevShort, lastShort);
-  const prevShortPct = pctChange(prevPrevShort, prevShort);
-  if (!(Math.abs(currShortPct) >= 2 * Math.abs(prevShortPct))) return null;
+  // 3) compute BBs same direction?
+  const upperDiff = upper_now - upper_prev;
+  const lowerDiff = lower_now - lower_prev;
+  let bbSameDir = 'No';
+  if(upperDiff > 0 && lowerDiff > 0) bbSameDir = 'Up';
+  else if(upperDiff < 0 && lowerDiff < 0) bbSameDir = 'Down';
+  else bbSameDir = 'No';
 
-  // compute other output columns:
-  const currClosePct = pctChange(prevClose, lastClose);
-  const prevClosePct = pctChange(prev2Close, prevClose);
-  const currVolPct = pctChange(prevVol, lastVol);
-  const prevVolPct = pctChange(prev2Vol, prevVol);
+  // 4) Distance % from respective band
+  let distPct = NaN;
+  if(currGreen){
+    // how far high is from upper band (positive if above)
+    distPct = (last.high - upper_now)/Math.abs(upper_now) * 100;
+  } else {
+    // how far low is from lower band (positive if below)
+    distPct = (lower_now - last.low)/Math.abs(lower_now) * 100;
+  }
 
-  const shortDiff = lastShort - prevShort;
+  // 5) close vs middle
+  const closeVsMiddle = last.close > sma_now ? 'Above' : (last.close < sma_now ? 'Below' : 'Equal');
+
+  // 6) which BB line has highest rate of change compared to prev
+  // rate = (now - prev)/prev in absolute percentage
+  const upperRate = upper_prev !== 0 ? Math.abs((upper_now - upper_prev)/upper_prev * 100) : 0;
+  const lowerRate = lower_prev !== 0 ? Math.abs((lower_now - lower_prev)/lower_prev * 100) : 0;
+  let bbHighest = 'Equal';
+  if(upperRate > lowerRate) bbHighest = 'Upper';
+  else if(lowerRate > upperRate) bbHighest = 'Lower';
+
+  // 7) prev candle color
+  const prevColor = prev.close > prev.open ? 'Green' : (prev.close < prev.open ? 'Red' : 'Doji');
+
+  // Metrics for display
+  const closePct = pctChange(prev.close, last.close);
+  const volPct = pctChange(prev.volume, last.volume);
 
   return {
     symbol,
-    prevClosePct,
-    currClosePct,
-    currVolPct,
-    prevVolPct,
-    currShortPct,
-    prevShortPct,
-    shortDiff
+    closePct: numOrNaN(closePct),
+    volPct: numOrNaN(volPct),
+    bbSameDir,
+    distPct: numOrNaN(distPct),
+    closeVsMiddle,
+    bbHighest,
+    prevColor,
+    upperRate,
+    lowerRate,
+    upperDiff,
+    lowerDiff
   };
 }
 
-/* ---------- Main scan loop ---------- */
-async function runScan() {
-  try {
-    results = [];
-    resultsBody.innerHTML = '<tr><td colspan="8" class="small">Preparing scan...</td></tr>';
-    statusEl.textContent = 'Fetching symbol list...';
+/* Rendering & sorting */
+function appendRow(obj){
+  const tr = document.createElement('tr');
+  tr.className = 'match';
+  tr.innerHTML = `
+    <td><strong>${obj.symbol}</strong></td>
+    <td>${toPctText(obj.closePct)}</td>
+    <td>${toPctText(obj.volPct)}</td>
+    <td class="center">${obj.bbSameDir === 'No' ? '<span class="tag">No</span>' : `<span class="tag ${obj.bbSameDir==='Up'?'up':'down'}">${obj.bbSameDir}</span>`}</td>
+    <td>${isNaN(obj.distPct)?'—':(obj.distPct>=0?'+':'') + obj.distPct.toFixed(2) + '%'}</td>
+    <td>${obj.closeVsMiddle}</td>
+    <td>${obj.bbHighest} (${obj.upperRate>obj.lowerRate?obj.upperRate.toFixed(2)+'%':obj.lowerRate.toFixed(2)+'%'})</td>
+    <td>${obj.prevColor}</td>
+  `;
+  resultsBody.appendChild(tr);
+}
 
-    const symbols = await fetchTopSymbols(MAX_SYMBOLS);
-    statusEl.textContent = `Scanning 0 / ${symbols.length}`;
+function sortResults(list, sortKey){
+  const [key, order] = sortKey.split('_');
+  const mul = order === 'asc' ? 1 : -1;
+  return list.sort((a,b) => {
+    if(key === 'symbol'){
+      return mul * a.symbol.localeCompare(b.symbol);
+    }
+    // Map friendly keys to object fields
+    const map = {
+      closePct: 'closePct',
+      volPct: 'volPct',
+      bbSameDir: 'bbSameDir',
+      distPct: 'distPct',
+      closeVsMiddle: 'closeVsMiddle',
+      bbHighest: 'bbHighest',
+      prevColor: 'prevColor'
+    };
+    const field = map[key] || key;
+    const va = a[field], vb = b[field];
+    // handle NaN / strings
+    if(typeof va === 'string' && typeof vb === 'string') return mul * va.localeCompare(vb);
+    const na = isNaN(va) ? 1 : 0;
+    const nb = isNaN(vb) ? 1 : 0;
+    if(na && nb) return 0;
+    if(na) return 1 * mul;
+    if(nb) return -1 * mul;
+    return (va - vb) * mul;
+  });
+}
+
+function renderTable(){
+  const sel = sortSelect.value;
+  const sorted = sortResults([...results], sel);
+  resultsBody.innerHTML = '';
+  if(sorted.length === 0){
+    resultsBody.innerHTML = '<tr><td colspan="8" class="small">No matches found.</td></tr>';
+    return;
+  }
+  for(const r of sorted) appendRow(r);
+}
+
+/* Main scanning loop */
+async function runScan(){
+  try{
+    results = [];
+    resultsBody.innerHTML = '<tr><td colspan="8" class="small">Preparing scan…</td></tr>';
+    statusEl.textContent = 'Building universe…';
+
+    const universe = await fetchTop200Symbols();
+    statusEl.textContent = `Scanning 0 / ${universe.length}`;
 
     let i = 0;
-    for (const sym of symbols) {
+    for(const sym of universe){
       i++;
-      statusEl.textContent = `Scanning ${i} / ${symbols.length}: ${sym}`;
+      statusEl.textContent = `Scanning ${i} / ${universe.length}: ${sym}`;
       try {
-        const klines = await fetchKlines(sym);
-        // fetch shortAccount series for symbol
-        const shortArr = await getShortAccountsForSymbol(sym); // array of shortAccount floats
-        const matchObj = checkConditionsAndBuildObject(sym, klines, shortArr);
-        if (matchObj) {
-          results.push(matchObj);
-          appendRow(matchObj); // live append
+        // fetch klines first and perform all checks locally
+        const kl = await fetchKlines(sym, KLINES_LIMIT);
+        const obj = evaluateSymbol(sym, kl);
+        if(obj){
+          results.push(obj);
+          appendRow(obj); // append live so user sees rows as they appear
         }
-      } catch (e) {
-        // ignore symbol-level errors and continue
-        //console.warn('err', sym, e);
+      } catch(e){
+        // ignore fetch errors for a symbol
+        // console.warn('symbol error', sym, e);
       }
-      // small delay so UI can update and to be polite
-      await sleep(120);
+      await sleep(PAUSE_MS);
     }
 
     statusEl.textContent = `Scan complete — found ${results.length} matches.`;
-    // final render (sorted according to dropdown)
     renderTable();
-  } catch (err) {
+  } catch(err){
     console.error(err);
     statusEl.textContent = 'Error: ' + (err.message || err);
+    resultsBody.innerHTML = '<tr><td colspan="8" class="small">Error during scan. See console.</td></tr>';
   }
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-/* ---------- Wiring ---------- */
-refreshBtn.addEventListener('click', () => {
+/* Wiring */
+refreshBtn.addEventListener('click', ()=>{
   refreshBtn.disabled = true;
-  resultsBody.innerHTML = '<tr><td colspan="8" class="small">Starting scan... (this may take 20-60s)</td></tr>';
-  runScan().finally(() => { refreshBtn.disabled = false; });
+  resultsBody.innerHTML = '<tr><td colspan="8" class="small">Starting scan…</td></tr>';
+  runScan().finally(()=> refreshBtn.disabled = false);
 });
 
-sortSelect.addEventListener('change', () => { renderTable(); });
+sortSelect.addEventListener('change', renderTable);
 
-/* Auto-run on page load (so page refresh triggers a scan). If you don't want auto-run, comment this line out. */
-window.addEventListener('load', () => {
-  // start a scan automatically on page load
-  refreshBtn.click();
-});
+// Auto-run on load
+window.addEventListener('load', () => { refreshBtn.click(); });
+
 </script>
 </body>
 </html>
-
