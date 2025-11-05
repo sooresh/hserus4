@@ -5,155 +5,148 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>hserus4</title>
 <style>
-  body { font-family: Arial, sans-serif; background: #0b0c10; color: #fff; text-align: center; }
-  h1 { margin-top: 20px; color: #00ff88; }
-  button { background: #00ff88; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-bottom: 15px; }
-  button:hover { background: #00cc6a; }
-  table { width: 95%; margin: 0 auto; border-collapse: collapse; background: #1f2833; }
-  th, td { padding: 8px 12px; border: 1px solid #45a29e; text-align: center; }
-  th { cursor: pointer; background: #45a29e; color: #000; }
-  tr:nth-child(even) { background: #0b0c10; }
-  #progress { margin: 15px; color: #66fcf1; }
+body { font-family: Arial, sans-serif; background: #0b0c10; color: #fff; text-align: center; }
+h1 { color: #00ff88; }
+button { background: #00ff88; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-bottom: 15px; }
+button:hover { background: #00cc6a; }
+#progress { margin: 10px; color: #66fcf1; font-weight: bold; }
+#bar { width: 80%; height: 8px; background: #1f2833; margin: 10px auto; border-radius: 4px; overflow: hidden; }
+#fill { height: 100%; width: 0%; background: #00ff88; transition: width 0.3s; }
+table { width: 95%; margin: 10px auto; border-collapse: collapse; background: #1f2833; }
+th, td { padding: 8px 12px; border: 1px solid #45a29e; text-align: center; }
+th { cursor: pointer; background: #45a29e; color: #000; }
+tr:nth-child(even) { background: #0b0c10; }
 </style>
 </head>
 <body>
-  <h1>hserus4</h1>
-  <button onclick="scan()">🔄 Refresh</button>
-  <div id="progress">Ready</div>
-  <table id="dataTable">
-    <thead>
-      <tr>
-        <th onclick="sortTable(0)">Symbol</th>
-        <th onclick="sortTable(1)">Close %</th>
-        <th onclick="sortTable(2)">Candle/BB %</th>
-        <th onclick="sortTable(3)">Within BB</th>
-        <th onclick="sortTable(4)">Prev Color</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<h1>hserus4</h1>
+<button onclick="scan()">🔄 Refresh</button>
+<div id="progress">Ready</div>
+<div id="bar"><div id="fill"></div></div>
+<table id="dataTable">
+  <thead>
+    <tr>
+      <th onclick="sortTable(0)">Symbol</th>
+      <th onclick="sortTable(1)">Close %</th>
+      <th onclick="sortTable(2)">Candle/BB %</th>
+      <th onclick="sortTable(3)">Within BB</th>
+      <th onclick="sortTable(4)">Prev Color</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
 
 <script>
 const excluded = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','AVAXUSDT','DOTUSDT','LINKUSDT','TRXUSDT','MATICUSDT','TONUSDT','SHIBUSDT','LTCUSDT','BCHUSDT','UNIUSDT','ICPUSDT','NEARUSDT','APTUSDT'];
 let tableData = [];
 
 async function scan() {
-  document.getElementById("progress").innerText = "Scanning...";
+  document.getElementById("progress").innerText = "Fetching symbols...";
+  document.getElementById("fill").style.width = "0%";
+  
   const res = await fetch("https://fapi.binance.com/fapi/v1/exchangeInfo");
   const data = await res.json();
-  const symbols = data.symbols
+  const all = data.symbols
     .filter(s => s.contractType === "PERPETUAL" && s.symbol.endsWith("USDT") && !excluded.includes(s.symbol))
     .slice(0, 250)
     .map(s => s.symbol);
 
   tableData = [];
-  let processed = 0;
-
-  for (const sym of symbols) {
-    try {
-      const kRes = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1h&limit=100`);
-      const klines = await kRes.json();
-      if (klines.length < 20) continue;
-      const latest = klines[klines.length - 1];
-      const prev = klines[klines.length - 2];
-      
-      const close = parseFloat(latest[4]);
-      const prevClose = parseFloat(prev[4]);
-      const high = parseFloat(latest[2]);
-      const low = parseFloat(latest[3]);
-      const vol = parseFloat(latest[5]);
-      const prevVol = parseFloat(prev[5]);
-
-      // (1) Volume condition
-      if (vol <= prevVol) continue;
-
-      // (2) abs close % > abs prev close %
-      const pct = ((close - prevClose) / prevClose) * 100;
-      const prevOpen = parseFloat(prev[1]);
-      const prevPct = ((prev[4] - prevOpen) / prevOpen) * 100;
-      if (Math.abs(pct) <= Math.abs(prevPct)) continue;
-
-      // (3) Candle length > ATR(10)
-      const highs = klines.slice(-20).map(k => parseFloat(k[2]));
-      const lows = klines.slice(-20).map(k => parseFloat(k[3]));
-      const closes = klines.slice(-20).map(k => parseFloat(k[4]));
-      let trs = [];
-      for (let i = 1; i < highs.length; i++) {
-        const tr = Math.max(
-          highs[i] - lows[i],
-          Math.abs(highs[i] - closes[i - 1]),
-          Math.abs(lows[i] - closes[i - 1])
-        );
-        trs.push(tr);
-      }
-      const atr = trs.slice(-10).reduce((a, b) => a + b, 0) / 10;
-      const candleLength = high - low;
-      if (candleLength <= atr) continue;
-
-      // Bollinger Bands (20, 2)
-      const ma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
-      const std = Math.sqrt(closes.slice(-20).map(c => (c - ma20) ** 2).reduce((a, b) => a + b, 0) / 20);
-      const upper = ma20 + 2 * std;
-      const lower = ma20 - 2 * std;
-      const withinBB = close >= lower && close <= upper ? "Yes" : "No";
-      const candleBBPct = ((candleLength / (upper - lower)) * 100).toFixed(1);
-      const prevColor = prev[4] > prev[1] ? "Green" : "Red";
-
-      tableData.push({
-        symbol: sym,
-        pct: pct.toFixed(2),
-        candleBBPct,
-        withinBB,
-        prevColor
-      });
-    } catch (err) { console.log("Error:", sym, err); }
-    processed++;
-    document.getElementById("progress").innerText = `Scanning ${processed}/${symbols.length}`;
+  const chunkSize = 20; // Parallel batch size
+  for (let i = 0; i < all.length; i += chunkSize) {
+    const batch = all.slice(i, i + chunkSize);
+    await Promise.all(batch.map(sym => processSymbol(sym)));
+    const pct = Math.round(((i + chunkSize) / all.length) * 100);
+    document.getElementById("fill").style.width = `${pct}%`;
+    document.getElementById("progress").innerText = `Scanning... ${Math.min(i+chunkSize, all.length)} / ${all.length}`;
   }
   populateTable();
-  document.getElementById("progress").innerText = `Done. ${tableData.length} symbols found.`;
+  document.getElementById("progress").innerText = `Done ✅ ${tableData.length} symbols found`;
+  document.getElementById("fill").style.width = "100%";
+}
+
+async function processSymbol(sym) {
+  try {
+    const kRes = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1h&limit=50`);
+    const kl = await kRes.json();
+    if (kl.length < 20) return;
+    const last = kl[kl.length-1], prev = kl[kl.length-2];
+    const close = parseFloat(last[4]), prevClose = parseFloat(prev[4]);
+    const high = parseFloat(last[2]), low = parseFloat(last[3]);
+    const vol = parseFloat(last[5]), prevVol = parseFloat(prev[5]);
+
+    // (1) Volume increase
+    if (vol <= prevVol) return;
+
+    // (2) Abs close% > abs prev close%
+    const pct = ((close - prevClose)/prevClose)*100;
+    const prevPct = ((prev[4]-prev[1])/parseFloat(prev[1]))*100;
+    if (Math.abs(pct) <= Math.abs(prevPct)) return;
+
+    // (3) Candle length > ATR(10)
+    const highs = kl.slice(-20).map(k=>parseFloat(k[2]));
+    const lows = kl.slice(-20).map(k=>parseFloat(k[3]));
+    const closes = kl.slice(-20).map(k=>parseFloat(k[4]));
+    let trs = [];
+    for(let i=1;i<highs.length;i++){
+      const tr = Math.max(
+        highs[i]-lows[i],
+        Math.abs(highs[i]-closes[i-1]),
+        Math.abs(lows[i]-closes[i-1])
+      );
+      trs.push(tr);
+    }
+    const atr = trs.slice(-10).reduce((a,b)=>a+b,0)/10;
+    const candleLength = high - low;
+    if (candleLength <= atr) return;
+
+    // Bollinger Bands (20,2)
+    const ma20 = closes.slice(-20).reduce((a,b)=>a+b,0)/20;
+    const std = Math.sqrt(closes.slice(-20).map(c=>(c-ma20)**2).reduce((a,b)=>a+b,0)/20);
+    const upper = ma20 + 2*std, lower = ma20 - 2*std;
+    const withinBB = (close>=lower && close<=upper)?"Yes":"No";
+    const candleBBPct = ((candleLength / (upper - lower)) * 100).toFixed(1);
+    const prevColor = prev[4] > prev[1] ? "Green" : "Red";
+
+    tableData.push({symbol:sym, pct:pct.toFixed(2), candleBBPct, withinBB, prevColor});
+  } catch(e){ console.log("Error:",sym,e); }
 }
 
 function populateTable() {
   const tbody = document.querySelector("#dataTable tbody");
   tbody.innerHTML = "";
-  tableData.forEach(row => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${row.symbol}</td>
-                    <td>${row.pct}</td>
-                    <td>${row.candleBBPct}</td>
-                    <td>${row.withinBB}</td>
-                    <td>${row.prevColor}</td>`;
+  tableData.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td>${r.symbol}</td>
+                    <td>${r.pct}</td>
+                    <td>${r.candleBBPct}</td>
+                    <td>${r.withinBB}</td>
+                    <td>${r.prevColor}</td>`;
     tbody.appendChild(tr);
   });
 }
 
-// Sorting function
+// Sort columns
 function sortTable(n) {
   const table = document.getElementById("dataTable");
-  let rows, switching = true, dir = "asc", switchcount = 0;
+  let switching = true, dir="asc";
   while (switching) {
     switching = false;
-    rows = table.rows;
-    for (let i = 1; i < (rows.length - 1); i++) {
-      let shouldSwitch = false;
+    const rows = table.rows;
+    for (let i=1;i<rows.length-1;i++) {
+      let shouldSwitch=false;
       let x = rows[i].getElementsByTagName("TD")[n];
-      let y = rows[i + 1].getElementsByTagName("TD")[n];
-      let cmpx = isNaN(parseFloat(x.innerHTML)) ? x.innerHTML.toLowerCase() : parseFloat(x.innerHTML);
-      let cmpy = isNaN(parseFloat(y.innerHTML)) ? y.innerHTML.toLowerCase() : parseFloat(y.innerHTML);
-      if ((dir === "asc" && cmpx > cmpy) || (dir === "desc" && cmpx < cmpy)) {
-        shouldSwitch = true;
-        break;
+      let y = rows[i+1].getElementsByTagName("TD")[n];
+      let xv = isNaN(parseFloat(x.innerHTML))?x.innerHTML:x.innerHTML*1;
+      let yv = isNaN(parseFloat(y.innerHTML))?y.innerHTML:y.innerHTML*1;
+      if ((dir=="asc" && xv>yv) || (dir=="desc" && xv<yv)) {
+        shouldSwitch=true; break;
       }
     }
     if (shouldSwitch) {
-      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-      switching = true;
-      switchcount++;
-    } else if (switchcount === 0 && dir === "asc") {
-      dir = "desc";
-      switching = true;
-    }
+      rows[i].parentNode.insertBefore(rows[i+1],rows[i]);
+      switching=true;
+    } else if (dir=="asc") { dir="desc"; switching=true; }
   }
 }
 </script>
