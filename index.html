@@ -1,372 +1,161 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>hserus4</title>
 <style>
-  :root{
-    --bg:#06121a; --card:#08202a; --muted:#9fb6c7; --accent:#7be3c7; --danger:#ff8a8a; --text:#e6f3f6;
-  }
-  body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(#031017,#07121a);color:var(--text);padding:16px}
-  header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-  h1{margin:0;font-size:18px}
-  .controls{display:flex;gap:8px;align-items:center}
-  button{padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#012;cursor:pointer}
-  button[disabled]{opacity:0.5;cursor:not-allowed}
-  .small{font-size:13px;color:var(--muted)}
-  .progress{font-size:14px;color:var(--muted)}
-  .tablewrap{margin-top:14px;overflow:auto;border-radius:8px}
-  table{width:100%;border-collapse:collapse;min-width:980px}
-  th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:right}
-  th{background:rgba(255,255,255,0.02);cursor:pointer;color:var(--muted);position:sticky;top:0}
-  td.symbol{text-align:left;color:#7bdfff;font-weight:600}
-  .green{color:#7be3c7}
-  .red{color:var(--danger)}
-  .placeholder{color:var(--muted)}
-  @media(max-width:880px){th,td{padding:6px;font-size:12px}}
+  body { font-family: Arial, sans-serif; background: #0b0c10; color: #fff; text-align: center; }
+  h1 { margin-top: 20px; color: #00ff88; }
+  button { background: #00ff88; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-bottom: 15px; }
+  button:hover { background: #00cc6a; }
+  table { width: 95%; margin: 0 auto; border-collapse: collapse; background: #1f2833; }
+  th, td { padding: 8px 12px; border: 1px solid #45a29e; text-align: center; }
+  th { cursor: pointer; background: #45a29e; color: #000; }
+  tr:nth-child(even) { background: #0b0c10; }
+  #progress { margin: 15px; color: #66fcf1; }
 </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>hserus4</h1>
-      <div class="small">hserus4</div>
-    </div>
-    <div class="controls">
-      <button id="refreshBtn">🔄 Refresh</button>
-      <div id="status" class="progress">Idle</div>
-    </div>
-  </header>
-
-  <div class="tablewrap" aria-live="polite">
-    <table id="resultsTable" role="table" aria-label="scanner results">
-      <thead>
-        <tr>
-          <th data-key="symbol">Symbol</th>
-          <th data-key="ratio">Ratio</th>
-          <th data-key="curr_pct">Curr%</th>
-          <th data-key="prev_pct">Prev%</th>
-          <th data-key="ls1h_pct">L/S1h%</th>
-          <th data-key="ls15m_pct">L/S15m%</th>
-        </tr>
-      </thead>
-      <tbody id="tbody">
-        <tr><td colspan="6" class="placeholder">Click <strong>Refresh</strong> to start scan.</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <h1>hserus4</h1>
+  <button onclick="scan()">🔄 Refresh</button>
+  <div id="progress">Ready</div>
+  <table id="dataTable">
+    <thead>
+      <tr>
+        <th onclick="sortTable(0)">Symbol</th>
+        <th onclick="sortTable(1)">Close %</th>
+        <th onclick="sortTable(2)">Candle/BB %</th>
+        <th onclick="sortTable(3)">Within BB</th>
+        <th onclick="sortTable(4)">Prev Color</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
 <script>
-/* CONFIG */
-const BASE = 'https://fapi.binance.com';
-const MAX_SYMBOLS = 250;
-const PAUSE_MS = 120; // polite pause
-const EXCLUDE_TOP20 = new Set([
-  "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","MATICUSDT","LTCUSDT","AVAXUSDT",
-  "TRXUSDT","LINKUSDT","ATOMUSDT","NEARUSDT","APTUSDT","ALGOUSDT","FILUSDT","SUIUSDT","XMRUSDT","APEUSDT"
-]);
+const excluded = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','AVAXUSDT','DOTUSDT','LINKUSDT','TRXUSDT','MATICUSDT','TONUSDT','SHIBUSDT','LTCUSDT','BCHUSDT','UNIUSDT','ICPUSDT','NEARUSDT','APTUSDT'];
+let tableData = [];
 
-/* DOM */
-const refreshBtn = document.getElementById('refreshBtn');
-const statusEl = document.getElementById('status');
-const tbody = document.getElementById('tbody');
-const table = document.getElementById('resultsTable');
+async function scan() {
+  document.getElementById("progress").innerText = "Scanning...";
+  const res = await fetch("https://fapi.binance.com/fapi/v1/exchangeInfo");
+  const data = await res.json();
+  const symbols = data.symbols
+    .filter(s => s.contractType === "PERPETUAL" && s.symbol.endsWith("USDT") && !excluded.includes(s.symbol))
+    .slice(0, 250)
+    .map(s => s.symbol);
 
-let rows = []; // collected matches
+  tableData = [];
+  let processed = 0;
 
-/* Helpers */
-function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
-function safeNum(v){ const n = Number(v); return Number.isFinite(n)?n:null; }
-function fmtPct(v){ if(!isFinite(v)) return '—'; return (v>=0?'+':'') + Number(v).toFixed(2) + '%'; }
-function fmtNum(v, d=2){ if(!isFinite(v)) return '—'; return Number(v).toFixed(d); }
-
-/* robust parser for long% inside topLongShortPositionRatio response objects */
-function parseLongPct(obj){
-  if(!obj || typeof obj !== 'object') return null;
-  // try common keys
-  const keys = ['longShortRatio','longShortPositionRatio','longPositionRatio','longPosition','longPct','longPercent'];
-  for(const k of keys){
-    if(k in obj){
-      const v = safeNum(obj[k]);
-      if(v === null) continue;
-      // normalize if ratio returned as 0..1
-      if(v > 0 && v <= 1) return v * 100;
-      return v;
-    }
-  }
-  // try combination
-  if('longPosition' in obj && 'shortPosition' in obj){
-    const la = safeNum(obj.longPosition), sa = safeNum(obj.shortPosition);
-    if(la !== null && sa !== null && (la+sa)!==0) return (la/(la+sa))*100;
-  }
-  // fallback: look for any numeric value in obj in 0..100 range
-  for(const k of Object.keys(obj)){
-    const v = safeNum(obj[k]);
-    if(v !== null && v >= 0 && v <= 100) return v;
-    if(v !== null && v > 0 && v <= 1) return v*100;
-  }
-  return null;
-}
-
-/* Fetch top volatile symbols (exclude top20) */
-async function getTopSymbols(limit=MAX_SYMBOLS){
-  statusEl.textContent = 'Fetching tickers...';
-  const [ei, tickRes] = await Promise.all([
-    fetch(`${BASE}/exchangeInfo`).then(r=>r.json()),
-    fetch(`${BASE}/ticker/24hr`).then(r=>r.json())
-  ]);
-  const perp = new Set((ei.symbols||[]).filter(s => s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT')).map(s=>s.symbol));
-  const tickers = (tickRes||[]).filter(t => perp.has(t.symbol));
-  // score by abs priceChangePercent * quoteVolume — good proxy for volatility/activity
-  tickers.sort((a,b) => Math.abs(Number(b.priceChangePercent || 0)) * Number(b.quoteVolume || 0) - Math.abs(Number(a.priceChangePercent || 0)) * Number(a.quoteVolume || 0));
-  const filtered = tickers.map(t=>t.symbol).filter(s=>!EXCLUDE_TOP20.has(s)).slice(0, limit);
-  return filtered;
-}
-
-/* Bollinger bands helper for 'period' on closes array */
-function bollinger(closes, period=20, mult=2){
-  if(!Array.isArray(closes) || closes.length < period) return null;
-  const slice = closes.slice(-period);
-  const mean = slice.reduce((a,b)=>a+b,0)/period;
-  const variance = slice.reduce((a,b)=>a + Math.pow(b-mean,2),0)/period;
-  const sd = Math.sqrt(variance);
-  return { upper: mean + mult*sd, middle: mean, lower: mean - mult*sd };
-}
-
-/* fetch klines for symbol — use limit=5 (we need current + prev + prev_prev + prev_prev_prev) */
-async function fetchKlines1h(symbol, limit=5){
-  const url = `${BASE}/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=${limit}`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('klines failed: ' + res.status);
-  return res.json();
-}
-
-/* fetch topLongShortPositionRatio for period */
-async function fetchLSPosition(symbol, period='1h', limit=2){
-  const url = `${BASE}/futures/data/topLongShortPositionRatio?symbol=${encodeURIComponent(symbol)}&period=${encodeURIComponent(period)}&limit=${limit}`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('ls failed: ' + res.status);
-  return res.json();
-}
-
-/* Main per-symbol processing */
-async function processSymbol(symbol, idx, total){
-  statusEl.textContent = `Scanning ${idx} / ${total}: ${symbol}`;
-  try {
-    const kl = await fetchKlines1h(symbol, 5); // returns array of arrays
-    if(!Array.isArray(kl) || kl.length < 5) return null;
-    // map useful values (open, high, low, close, volume)
-    // kl structure: [ openTime, open, high, low, close, volume, ... ]
-    const mapped = kl.map(k => ({
-      open: safeNum(k[1]), high: safeNum(k[2]), low: safeNum(k[3]), close: safeNum(k[4]), vol: safeNum(k[5])
-    }));
-    // indexes: -1 current, -2 prev, -3 prev_prev, -4 prev_prev_prev
-    const curr = mapped[mapped.length-1];
-    const prev = mapped[mapped.length-2];
-    const prevPrev = mapped[mapped.length-3];
-    const prevPrevPrev = mapped[mapped.length-4];
-
-    // ensure required numbers
-    if([curr.close, prev.close, prevPrev.close, prevPrevPrev.close].some(v => v === null)) return null;
-
-    // percentage changes (prev and prevPrev)
-    const prev_close_change = ((prev.close - prevPrev.close)/prevPrev.close)*100;
-    const prevPrev_close_change = ((prevPrev.close - prevPrevPrev.close)/prevPrevPrev.close)*100;
-
-    // Condition 1: abs(prev_close_change) >= 1.5 * abs(prevPrev_close_change)
-    if(!isFinite(prev_close_change) || !isFinite(prevPrev_close_change)) return null;
-    if(!(Math.abs(prev_close_change) >= 1.5 * Math.abs(prevPrev_close_change))) return null;
-
-    // Condition 2: wick vs body
-    // current body size and wicks
-    const currBody = Math.abs(curr.close - curr.open);
-    const currLowerWick = Math.min(curr.open, curr.close) - curr.low;
-    const currUpperWick = curr.high - Math.max(curr.open, curr.close);
-
-    // prev candle color (green if prev.close >= prev.open)
-    const prevIsGreen = (prev.close >= prev.open);
-
-    if(prevIsGreen){
-      // require current lower wick > current body
-      if(!(currLowerWick > currBody)) return null;
-    } else {
-      // require current upper wick > current body
-      if(!(currUpperWick > currBody)) return null;
-    }
-
-    // both conditions satisfied — now fetch long-short ratios (1h & 15m)
-    // 1h (limit=2 for prev & curr)
-    let ls1h = null, ls15m = null;
+  for (const sym of symbols) {
     try {
-      const arr1h = await fetchLSPosition(symbol, '1h', 2);
-      if(Array.isArray(arr1h) && arr1h.length >= 2){
-        const pPrev = parseLongPct(arr1h[0]);
-        const pCurr = parseLongPct(arr1h[1]);
-        ls1h = { prev: pPrev, curr: pCurr };
+      const kRes = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1h&limit=100`);
+      const klines = await kRes.json();
+      if (klines.length < 20) continue;
+      const latest = klines[klines.length - 1];
+      const prev = klines[klines.length - 2];
+      
+      const close = parseFloat(latest[4]);
+      const prevClose = parseFloat(prev[4]);
+      const high = parseFloat(latest[2]);
+      const low = parseFloat(latest[3]);
+      const vol = parseFloat(latest[5]);
+      const prevVol = parseFloat(prev[5]);
+
+      // (1) Volume condition
+      if (vol <= prevVol) continue;
+
+      // (2) abs close % > abs prev close %
+      const pct = ((close - prevClose) / prevClose) * 100;
+      const prevOpen = parseFloat(prev[1]);
+      const prevPct = ((prev[4] - prevOpen) / prevOpen) * 100;
+      if (Math.abs(pct) <= Math.abs(prevPct)) continue;
+
+      // (3) Candle length > ATR(10)
+      const highs = klines.slice(-20).map(k => parseFloat(k[2]));
+      const lows = klines.slice(-20).map(k => parseFloat(k[3]));
+      const closes = klines.slice(-20).map(k => parseFloat(k[4]));
+      let trs = [];
+      for (let i = 1; i < highs.length; i++) {
+        const tr = Math.max(
+          highs[i] - lows[i],
+          Math.abs(highs[i] - closes[i - 1]),
+          Math.abs(lows[i] - closes[i - 1])
+        );
+        trs.push(tr);
       }
-    } catch(e){
-      // ignore fetch error — still include symbol but ls fields will be —
-      console.warn('ls1h failed', symbol, e.message || e);
-    }
-    // 15m (limit=1) — latest
-    try {
-      const arr15 = await fetchLSPosition(symbol, '15m', 1);
-      if(Array.isArray(arr15) && arr15.length >= 1){
-        const p15 = parseLongPct(arr15[arr15.length-1]);
-        ls15m = { curr: p15 };
-      }
-    } catch(e){
-      console.warn('ls15m failed', symbol, e.message || e);
-    }
+      const atr = trs.slice(-10).reduce((a, b) => a + b, 0) / 10;
+      const candleLength = high - low;
+      if (candleLength <= atr) continue;
 
-    // compute requested outputs:
-    const ratioVal = Math.abs(prev_close_change) / (Math.abs(prevPrev_close_change) || 1e-9); // avoid div0
-    const currPct = ((curr.close - prev.close)/prev.close)*100;
-    const prevPct = prev_close_change;
+      // Bollinger Bands (20, 2)
+      const ma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+      const std = Math.sqrt(closes.slice(-20).map(c => (c - ma20) ** 2).reduce((a, b) => a + b, 0) / 20);
+      const upper = ma20 + 2 * std;
+      const lower = ma20 - 2 * std;
+      const withinBB = close >= lower && close <= upper ? "Yes" : "No";
+      const candleBBPct = ((candleLength / (upper - lower)) * 100).toFixed(1);
+      const prevColor = prev[4] > prev[1] ? "Green" : "Red";
 
-    // L/S 1h % change (percent change between prev and curr long%)
-    let ls1h_pct = null;
-    if(ls1h && isFinite(ls1h.prev) && isFinite(ls1h.curr) && ls1h.prev !== 0){
-      ls1h_pct = ((ls1h.curr - ls1h.prev)/Math.abs(ls1h.prev))*100;
-    }
-
-    // L/S 15m % relative to current 1h long%
-    let ls15m_pct = null;
-    if(ls15m && isFinite(ls15m.curr) && ls1h && isFinite(ls1h.curr) && ls1h.curr !== 0){
-      ls15m_pct = ((ls15m.curr - ls1h.curr)/Math.abs(ls1h.curr))*100;
-    }
-
-    return {
-      symbol,
-      ratio: ratioVal,
-      curr_pct: currPct,
-      prev_pct: prevPct,
-      ls1h_pct: ls1h_pct,
-      ls15m_pct: ls15m_pct
-    };
-
-  } catch (err){
-    console.warn('processSymbol error', symbol, err);
-    return null;
-  } finally {
-    await sleep(PAUSE_MS);
+      tableData.push({
+        symbol: sym,
+        pct: pct.toFixed(2),
+        candleBBPct,
+        withinBB,
+        prevColor
+      });
+    } catch (err) { console.log("Error:", sym, err); }
+    processed++;
+    document.getElementById("progress").innerText = `Scanning ${processed}/${symbols.length}`;
   }
+  populateTable();
+  document.getElementById("progress").innerText = `Done. ${tableData.length} symbols found.`;
 }
 
-/* append a single row live */
-function appendRow(obj){
-  if(!obj) return;
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td class="symbol">${obj.symbol}</td>
-    <td>${isFinite(obj.ratio)?fmtNum(obj.ratio,2):'—'}</td>
-    <td class="${obj.curr_pct>=0?'green':'red'}">${isFinite(obj.curr_pct)?fmtPct(obj.curr_pct):'—'}</td>
-    <td class="${obj.prev_pct>=0?'green':'red'}">${isFinite(obj.prev_pct)?fmtPct(obj.prev_pct):'—'}</td>
-    <td>${isFinite(obj.ls1h_pct)?fmtPct(obj.ls1h_pct):'—'}</td>
-    <td>${isFinite(obj.ls15m_pct)?fmtPct(obj.ls15m_pct):'—'}</td>
-  `;
-  tbody.appendChild(tr);
-}
-
-/* render final table (keeps current order in rows array) */
-function renderAll(){
-  tbody.innerHTML = '';
-  if(rows.length === 0){
-    tbody.innerHTML = `<tr><td colspan="6" class="placeholder">No matches found.</td></tr>`;
-    return;
-  }
-  for(const r of rows) appendRow(r);
-}
-
-/* Sorting */
-function parseCellValue(s){
-  if(s === null || s === undefined) return NaN;
-  if(typeof s === 'number') return s;
-  // strip percent, plus, commas
-  const v = String(s).replace(/[,%\+\s]/g,'');
-  const n = Number(v);
-  return Number.isFinite(n)?n:NaN;
-}
-
-function sortTable(colIndex){
-  const tbodyEl = table.tBodies[0];
-  const trs = Array.from(tbodyEl.querySelectorAll('tr'));
-  if(trs.length === 0) return;
-  // determine current direction stored on table
-  table._sortState = table._sortState || {};
-  const key = 'c' + colIndex;
-  const dir = table._sortState[key] === 'asc' ? 'desc' : 'asc';
-  table._sortState[key] = dir;
-
-  const getCell = (tr) => tr.cells[colIndex] ? tr.cells[colIndex].innerText.trim() : '';
-
-  trs.sort((a,b) => {
-    const va = parseCellValue(getCell(a));
-    const vb = parseCellValue(getCell(b));
-    const bothNum = !Number.isNaN(va) && !Number.isNaN(vb);
-    let cmp = 0;
-    if(bothNum) cmp = va - vb;
-    else cmp = getCell(a).localeCompare(getCell(b), undefined, {numeric:true, sensitivity:'base'});
-    return dir === 'asc' ? cmp : -cmp;
+function populateTable() {
+  const tbody = document.querySelector("#dataTable tbody");
+  tbody.innerHTML = "";
+  tableData.forEach(row => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${row.symbol}</td>
+                    <td>${row.pct}</td>
+                    <td>${row.candleBBPct}</td>
+                    <td>${row.withinBB}</td>
+                    <td>${row.prevColor}</td>`;
+    tbody.appendChild(tr);
   });
-
-  trs.forEach(tr => tbodyEl.appendChild(tr));
 }
 
-/* main scan orchestration */
-async function startScan(){
-  try {
-    refreshBtn.disabled = true;
-    rows = [];
-    tbody.innerHTML = `<tr><td colspan="6" class="placeholder">Preparing symbol list...</td></tr>`;
-    statusEl.textContent = 'Preparing...';
-
-    const symbols = await getTopSymbols(MAX_SYMBOLS);
-    if(!Array.isArray(symbols) || symbols.length === 0){
-      tbody.innerHTML = `<tr><td colspan="6" class="placeholder">No symbols found.</td></tr>`;
-      statusEl.textContent = 'No symbols';
-      refreshBtn.disabled = false;
-      return;
-    }
-
-    tbody.innerHTML = '';
-    const total = symbols.length;
-    let i = 0;
-    for(const sym of symbols){
-      i++;
-      statusEl.textContent = `Scanning ${i} / ${total}: ${sym}`;
-      const res = await processSymbol(sym, i, total);
-      if(res){
-        rows.push(res);
-        appendRow(res); // live append
+// Sorting function
+function sortTable(n) {
+  const table = document.getElementById("dataTable");
+  let rows, switching = true, dir = "asc", switchcount = 0;
+  while (switching) {
+    switching = false;
+    rows = table.rows;
+    for (let i = 1; i < (rows.length - 1); i++) {
+      let shouldSwitch = false;
+      let x = rows[i].getElementsByTagName("TD")[n];
+      let y = rows[i + 1].getElementsByTagName("TD")[n];
+      let cmpx = isNaN(parseFloat(x.innerHTML)) ? x.innerHTML.toLowerCase() : parseFloat(x.innerHTML);
+      let cmpy = isNaN(parseFloat(y.innerHTML)) ? y.innerHTML.toLowerCase() : parseFloat(y.innerHTML);
+      if ((dir === "asc" && cmpx > cmpy) || (dir === "desc" && cmpx < cmpy)) {
+        shouldSwitch = true;
+        break;
       }
     }
-
-    statusEl.textContent = `Scan complete — found ${rows.length} matches.`;
-    refreshBtn.disabled = false;
-  } catch(err){
-    console.error(err);
-    statusEl.textContent = 'Error: ' + (err.message || err);
-    refreshBtn.disabled = false;
+    if (shouldSwitch) {
+      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+      switching = true;
+      switchcount++;
+    } else if (switchcount === 0 && dir === "asc") {
+      dir = "desc";
+      switching = true;
+    }
   }
 }
-
-/* Wire up */
-refreshBtn.addEventListener('click', () => {
-  // clear previous table rows
-  tbody.innerHTML = `<tr><td colspan="6" class="placeholder">Starting scan...</td></tr>`;
-  startScan();
-});
-
-document.querySelectorAll('#resultsTable thead th').forEach((th, idx) => {
-  th.addEventListener('click', () => sortTable(idx));
-});
-
-/* helper formatters used above */
-function fmtPct(v){ if(!isFinite(v)) return '—'; return (v>=0?'+':'') + Number(v).toFixed(2) + '%'; }
-function fmtNum(v,d=2){ if(!isFinite(v)) return '—'; return Number(v).toFixed(d); }
-
 </script>
 </body>
 </html>
