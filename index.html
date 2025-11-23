@@ -67,7 +67,10 @@
                             <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="posAccConf" data-type="str" title="Pos & Acc Ratio moving in same direction?">
                                 Pos/Acc Conf? <span class="sort-arrow"></span>
                             </th>
-                            <!-- NEW COLUMN -->
+                            <!-- NEW: SMA STATUS -->
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="smaStatus" data-type="str" title="Current Price relative to SMA 20">
+                                vs SMA 20 <span class="sort-arrow"></span>
+                            </th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="posAccelPct" data-type="num" title="Formula: (currentposchg / prevposchg) * 100">
                                 Accel % <span class="sort-arrow"></span>
                             </th>
@@ -78,7 +81,7 @@
                     </thead>
                     <tbody id="results-body" class="divide-y divide-gray-700 bg-gray-800">
                         <tr>
-                            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                            <td colspan="8" class="px-6 py-12 text-center text-gray-500">
                                 Click "Start Scan" to begin.
                             </td>
                         </tr>
@@ -120,7 +123,7 @@
         async function runScanner() {
             setLoading(true);
             scannedData = [];
-            resultsBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500 animate-pulse">Initializing Scanner...</td></tr>';
+            resultsBody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-gray-500 animate-pulse">Initializing Scanner...</td></tr>';
             
             try {
                 // 1. Fetch Top 250 Volatile
@@ -165,7 +168,7 @@
             } catch (err) {
                 console.error(err);
                 statusText.textContent = "Error: " + err.message;
-                resultsBody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-400">Error: ${err.message}</td></tr>`;
+                resultsBody.innerHTML = `<tr><td colspan="8" class="px-6 py-4 text-center text-red-400">Error: ${err.message}</td></tr>`;
             } finally {
                 setLoading(false);
             }
@@ -266,35 +269,32 @@
             if (currentposchg > 0 && currentaccchg > 0) posAccConf = "Yes";
             else if (currentposchg < 0 && currentaccchg < 0) posAccConf = "Yes";
 
-            // (NEW) Accel %
-            // Logic: both signals are same sign, so simple division works
+            // (6) Accel %
             let posAccelPct = 0;
             if (prevposchg !== 0) {
                 posAccelPct = (currentposchg / prevposchg) * 100;
             }
 
-            // (6) Bollinger Band Distance
+            // (7) Bollinger Band Distance & SMA Status
             // Calculate BB Manually
             const closes = klines.slice(-BB_PERIOD).map(k => parseFloat(k[4]));
             const sum = closes.reduce((a, b) => a + b, 0);
-            const sma = sum / BB_PERIOD;
+            const sma = sum / BB_PERIOD; // THIS IS THE SMA 20
             const variance = closes.reduce((a, b) => a + Math.pow(b - sma, 2), 0) / BB_PERIOD;
             const stdDev = Math.sqrt(variance);
             const upper = sma + (stdDev * 2);
             const lower = sma - (stdDev * 2);
             const width = upper - lower;
 
+            // --- NEW: SMA STATUS ---
+            const smaStatus = close > sma ? "Above" : "Below";
+
             let bbDist = 0;
             if (width === 0) {
                 bbDist = 0;
             } else if (currentposchg > 0) {
-                // Distance of current close from lower BB w.r.t total width
-                // How far UP from the bottom are we?
                 bbDist = ((close - lower) / width) * 100;
             } else {
-                // currentposchg < 0
-                // Distance of current close from top BB w.r.t total width
-                // How far DOWN from the top are we?
                 bbDist = ((upper - close) / width) * 100;
             }
 
@@ -304,8 +304,9 @@
                 volChg,
                 candleDiv,
                 posAccConf,
-                posAccelPct, // New field
-                bbDist
+                posAccelPct,
+                bbDist,
+                smaStatus // New Field
             };
         }
 
@@ -368,7 +369,7 @@
 
             // Render
             if (scannedData.length === 0) {
-                resultsBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">No symbols found matching criteria.</td></tr>';
+                resultsBody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-gray-500">No symbols found matching criteria.</td></tr>';
                 return;
             }
 
@@ -391,6 +392,11 @@
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-1 rounded text-xs ${row.posAccConf === 'Yes' ? 'bg-green-900/30 text-green-400 border border-green-700/50' : 'text-gray-600'}">
                             ${row.posAccConf}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-1 rounded text-xs ${row.smaStatus === 'Above' ? 'bg-green-900/30 text-green-400 border border-green-700/50' : 'bg-red-900/30 text-red-400 border border-red-700/50'}">
+                            ${row.smaStatus}
                         </span>
                     </td>
                     <td class="px-4 py-3 text-right font-mono text-gray-300">
@@ -425,3 +431,4 @@
     </script>
 </body>
 </html>
+
