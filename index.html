@@ -42,7 +42,7 @@
 
         <!-- Progress Section -->
         <div id="progress-container" class="w-full bg-gray-800 rounded-full h-3 mb-2 hidden overflow-hidden border border-gray-700">
-            <div id="progress-bar" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full w-0"></div>
+            <div id="progress-bar" class="bg-gradient-to-r from-blue-500 to-teal-400 h-3 rounded-full w-0"></div>
         </div>
         <p id="status-text" class="text-center text-gray-400 text-sm mb-6 min-h-[20px]"></p>
 
@@ -56,32 +56,28 @@
                                 Symbol <span class="sort-arrow">▼</span>
                             </th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="priceChg" data-type="num">
-                                Price Chg <span class="sort-arrow"></span>
+                                Price % <span class="sort-arrow"></span>
                             </th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="volChg" data-type="num">
-                                Vol Chg <span class="sort-arrow"></span>
+                                Vol % <span class="sort-arrow"></span>
                             </th>
-                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="candleDiv" data-type="str" title="Is Pos > 0 & Red Candle OR Pos < 0 & Green Candle?">
-                                Color Div? <span class="sort-arrow"></span>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="bodyRatio" data-type="num" title="Curr Body / Prev Body">
+                                Body Ratio <span class="sort-arrow"></span>
                             </th>
-                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="posAccConf" data-type="str" title="Pos & Acc Ratio moving in same direction?">
-                                Pos/Acc Conf? <span class="sort-arrow"></span>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="volRatio" data-type="num" title="Curr Vol / Prev Vol">
+                                Vol Ratio <span class="sort-arrow"></span>
                             </th>
-                            <!-- NEW: SMA STATUS -->
-                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="smaStatus" data-type="str" title="Current Price relative to SMA 20">
-                                vs SMA 20 <span class="sort-arrow"></span>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="bodyBB" data-type="num" title="Curr Body / BB Width">
+                                Body/BB % <span class="sort-arrow"></span>
                             </th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="posAccelPct" data-type="num" title="Formula: (currentposchg / prevposchg) * 100">
-                                Accel % <span class="sort-arrow"></span>
-                            </th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="bbDist" data-type="num" title="Distance from opposing BB band %">
-                                BB Dist % <span class="sort-arrow"></span>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider sortable" data-col="lsDelta" data-type="num" title="LS Ratio (5m) - LS Ratio (1h)">
+                                LS Delta <span class="sort-arrow"></span>
                             </th>
                         </tr>
                     </thead>
                     <tbody id="results-body" class="divide-y divide-gray-700 bg-gray-800">
                         <tr>
-                            <td colspan="8" class="px-6 py-12 text-center text-gray-500">
+                            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
                                 Click "Start Scan" to begin.
                             </td>
                         </tr>
@@ -101,7 +97,7 @@
         
         // --- APP STATE ---
         let scannedData = [];
-        let sortConfig = { col: 'bbDist', dir: 'desc' };
+        let sortConfig = { col: 'bodyBB', dir: 'desc' };
 
         // --- DOM ELEMENTS ---
         const refreshBtn = document.getElementById('refresh-btn');
@@ -123,7 +119,7 @@
         async function runScanner() {
             setLoading(true);
             scannedData = [];
-            resultsBody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-gray-500 animate-pulse">Initializing Scanner...</td></tr>';
+            resultsBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500 animate-pulse">Initializing Scanner...</td></tr>';
             
             try {
                 // 1. Fetch Top 250 Volatile
@@ -153,12 +149,11 @@
                     completed += batch.length;
                     updateProgress(completed, symbols.length);
 
-                    // Render intermediate results occasionally
                     if (scannedData.length > 0 && i % 10 === 0) {
                         sortAndRender();
                     }
 
-                    // Rate limit buffer
+                    // Small buffer to respect rate limits
                     await new Promise(r => setTimeout(r, 100));
                 }
 
@@ -168,145 +163,96 @@
             } catch (err) {
                 console.error(err);
                 statusText.textContent = "Error: " + err.message;
-                resultsBody.innerHTML = `<tr><td colspan="8" class="px-6 py-4 text-center text-red-400">Error: ${err.message}</td></tr>`;
+                resultsBody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-400">Error: ${err.message}</td></tr>`;
             } finally {
                 setLoading(false);
             }
         }
 
         async function analyzeSymbol(symbol) {
-            // Need Klines for 1h (Close, Vol, BB)
-            // Limit 25 to ensure enough data for SMA20
+            // Need Klines for 1h (limit 25 for SMA20)
             const klines = await fetchJson(`${API_BASE}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=25`);
             if (!klines || klines.length < BB_PERIOD + 2) return null;
 
-            // Get Position Ratio & Account Ratio
-            // We need 1h history (Current[-1], Prev[-2], PrevPrev[-3]) -> Limit 5 to be safe
-            // We need 5m history (Current[-1])
-            const [posRatio1h, posRatio5m, accRatio1h, accRatio5m] = await Promise.all([
-                fetchJson(`${API_BASE}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=5`),
-                fetchJson(`${API_BASE}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=5m&limit=2`),
-                fetchJson(`${API_BASE}/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=1h&limit=2`), // Need current 1h
-                fetchJson(`${API_BASE}/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=5m&limit=2`)  // Need current 5m
-            ]);
+            // Extract Candle Data
+            const curr = klines[klines.length - 1];
+            const prev = klines[klines.length - 2];
 
-            // Validate Data availability
-            if (!posRatio1h || posRatio1h.length < 3 || !posRatio5m || posRatio5m.length < 1 ||
-                !accRatio1h || accRatio1h.length < 1 || !accRatio5m || accRatio5m.length < 1) {
-                return null;
-            }
-
-            // --- DATA EXTRACTION ---
-            // Arrays come sorted by time ascending. Last index is latest.
-            const pr1h_curr = parseFloat(posRatio1h[posRatio1h.length - 1].longShortRatio);
-            const pr1h_prev = parseFloat(posRatio1h[posRatio1h.length - 2].longShortRatio);
-            const pr1h_prev2 = parseFloat(posRatio1h[posRatio1h.length - 3].longShortRatio);
-            const pr5m_curr = parseFloat(posRatio5m[posRatio5m.length - 1].longShortRatio);
-
-            const ar1h_curr = parseFloat(accRatio1h[accRatio1h.length - 1].longShortRatio);
-            const ar5m_curr = parseFloat(accRatio5m[accRatio5m.length - 1].longShortRatio);
-
-            // --- CALCULATIONS (a, b, c, d) ---
-            const currentposchg = pr5m_curr - pr1h_curr;   // (a)
-            const prevposchg = pr1h_curr - pr1h_prev;      // (b)
-            const prevprevposchg = pr1h_prev - pr1h_prev2; // (c)
-            const currentaccchg = ar5m_curr - ar1h_curr;   // (d)
-
-            // --- FILTER LOGIC ---
-
-            // Condition 1: Acceleration (1.4x)
-            let cond1 = false;
-            if (currentposchg > 0 && prevposchg > 0) {
-                if (currentposchg > (prevposchg * 1.4)) cond1 = true;
-            } else if (currentposchg < 0 && prevposchg < 0) {
-                if (currentposchg < (prevposchg * 1.4)) cond1 = true;
-            }
-
-            if (!cond1) return null;
-
-            // Condition 2: Reversal from prev-prev
-            let cond2 = false;
-            if (currentposchg > 0 && prevposchg > 0) {
-                // If trending up, verify it was down before (reversal/start)
-                if (prevprevposchg < 0) cond2 = true;
-            } else if (currentposchg < 0 && prevposchg < 0) {
-                // If trending down, verify it was up before
-                if (prevprevposchg > 0) cond2 = true;
-            }
-
-            if (!cond2) return null;
-
-            // --- FRONTEND METRICS ---
+            const cOpen = parseFloat(curr[1]);
+            const cClose = parseFloat(curr[4]);
+            const cVol = parseFloat(curr[5]);
             
-            // Kline Data extraction
-            const currCandle = klines[klines.length - 1];
-            const prevCandle = klines[klines.length - 2];
+            const pOpen = parseFloat(prev[1]);
+            const pClose = parseFloat(prev[4]);
+            const pVol = parseFloat(prev[5]);
+
+            // --- Basic Candle Calculations ---
+            const cBody = Math.abs(cClose - cOpen);
+            const pBody = Math.abs(pClose - pOpen);
             
-            const close = parseFloat(currCandle[4]);
-            const open = parseFloat(currCandle[1]);
-            const vol = parseFloat(currCandle[5]);
-            const prevVol = parseFloat(prevCandle[5]);
+            const isCurrGreen = cClose > cOpen;
+            const isPrevGreen = pClose > pOpen;
 
-            // (2) Close %
-            const priceChg = ((close - open) / open) * 100;
+            // --- Condition 1: Color Alternation ---
+            // If current Red, prev must be Green (or vice versa)
+            // Basically, checks if they are NOT same color
+            if (isCurrGreen === isPrevGreen) return null;
 
-            // (3) Vol %
-            const volChg = ((vol - prevVol) / prevVol) * 100;
-
-            // (4) Candle Color Divergence
-            const isGreen = close > open;
-            let candleDiv = "No";
-            if (currentposchg > 0) {
-                // Check if candle is red
-                candleDiv = (!isGreen) ? "Yes" : "No";
-            } else if (currentposchg < 0) {
-                // Check if candle is green
-                candleDiv = (isGreen) ? "Yes" : "No";
-            }
-
-            // (5) Pos & Acc Confluence
-            let posAccConf = "No";
-            if (currentposchg > 0 && currentaccchg > 0) posAccConf = "Yes";
-            else if (currentposchg < 0 && currentaccchg < 0) posAccConf = "Yes";
-
-            // (6) Accel %
-            let posAccelPct = 0;
-            if (prevposchg !== 0) {
-                posAccelPct = (currentposchg / prevposchg) * 100;
-            }
-
-            // (7) Bollinger Band Distance & SMA Status
-            // Calculate BB Manually
+            // --- Bollinger Band Calculation ---
             const closes = klines.slice(-BB_PERIOD).map(k => parseFloat(k[4]));
             const sum = closes.reduce((a, b) => a + b, 0);
-            const sma = sum / BB_PERIOD; // THIS IS THE SMA 20
+            const sma = sum / BB_PERIOD;
             const variance = closes.reduce((a, b) => a + Math.pow(b - sma, 2), 0) / BB_PERIOD;
             const stdDev = Math.sqrt(variance);
             const upper = sma + (stdDev * 2);
             const lower = sma - (stdDev * 2);
-            const width = upper - lower;
+            const bbWidth = upper - lower;
 
-            // --- NEW: SMA STATUS ---
-            const smaStatus = close > sma ? "Above" : "Below";
+            // Avoid division by zero issues
+            if (bbWidth === 0) return null;
 
-            let bbDist = 0;
-            if (width === 0) {
-                bbDist = 0;
-            } else if (currentposchg > 0) {
-                bbDist = ((close - lower) / width) * 100;
-            } else {
-                bbDist = ((upper - close) / width) * 100;
-            }
+            // --- Condition 2: Large Body ---
+            // Current body > BB Width * 0.3
+            if (cBody <= (bbWidth * 0.3)) return null;
+
+            // --- If Conditions 1 & 2 Met: Fetch LS Data ---
+            // This optimizes speed by only fetching LS for matches
+            const [posRatio5m, posRatio1h] = await Promise.all([
+                fetchJson(`${API_BASE}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=5m&limit=1`).catch(()=>[]),
+                fetchJson(`${API_BASE}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=1h&limit=1`).catch(()=>[])
+            ]);
+
+            // Default to 0 if data missing (avoids crashing logic)
+            const ls5m = (posRatio5m && posRatio5m.length) ? parseFloat(posRatio5m[0].longShortRatio) : 0;
+            const ls1h = (posRatio1h && posRatio1h.length) ? parseFloat(posRatio1h[0].longShortRatio) : 0;
+
+            // --- Final Calculations for Table ---
+            const priceChg = ((cClose - cOpen) / cOpen) * 100;
+            const volChg = ((cVol - pVol) / pVol) * 100;
+            
+            // Body Ratio (Curr / Prev * 100)
+            let bodyRatio = 0;
+            if (pBody > 0) bodyRatio = (cBody / pBody) * 100;
+            else bodyRatio = cBody > 0 ? 999 : 0; // Handle zero prev body
+
+            // Vol Ratio (Curr / Prev * 100)
+            let volRatio = 0;
+            if (pVol > 0) volRatio = (cVol / pVol) * 100;
+
+            // Body / BB %
+            const bodyBB = (cBody / bbWidth) * 100;
+
+            // LS Delta
+            const lsDelta = ls5m - ls1h;
 
             return {
                 symbol,
                 priceChg,
                 volChg,
-                candleDiv,
-                posAccConf,
-                posAccelPct,
-                bbDist,
-                smaStatus // New Field
+                bodyRatio,
+                volRatio,
+                bodyBB,
+                lsDelta
             };
         }
 
@@ -369,7 +315,7 @@
 
             // Render
             if (scannedData.length === 0) {
-                resultsBody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-gray-500">No symbols found matching criteria.</td></tr>';
+                resultsBody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">No symbols found matching criteria.</td></tr>';
                 return;
             }
 
@@ -384,26 +330,17 @@
                     <td class="px-4 py-3 text-right text-gray-300">
                         ${row.volChg.toFixed(2)}%
                     </td>
-                    <td class="px-4 py-3 text-center">
-                        <span class="px-2 py-1 rounded text-xs ${row.candleDiv === 'Yes' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-700/50' : 'text-gray-600'}">
-                            ${row.candleDiv}
-                        </span>
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                        <span class="px-2 py-1 rounded text-xs ${row.posAccConf === 'Yes' ? 'bg-green-900/30 text-green-400 border border-green-700/50' : 'text-gray-600'}">
-                            ${row.posAccConf}
-                        </span>
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                        <span class="px-2 py-1 rounded text-xs ${row.smaStatus === 'Above' ? 'bg-green-900/30 text-green-400 border border-green-700/50' : 'bg-red-900/30 text-red-400 border border-red-700/50'}">
-                            ${row.smaStatus}
-                        </span>
+                    <td class="px-4 py-3 text-right font-mono text-gray-300">
+                        ${row.bodyRatio.toFixed(0)}%
                     </td>
                     <td class="px-4 py-3 text-right font-mono text-gray-300">
-                        ${row.posAccelPct.toFixed(0)}%
+                        ${row.volRatio.toFixed(0)}%
                     </td>
-                    <td class="px-4 py-3 text-right font-mono text-gray-300">
-                        ${row.bbDist.toFixed(1)}%
+                    <td class="px-4 py-3 text-right font-mono font-bold text-teal-400">
+                        ${row.bodyBB.toFixed(1)}%
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono ${row.lsDelta > 0 ? 'text-green-400' : 'text-red-400'}">
+                        ${row.lsDelta.toFixed(3)}
                     </td>
                 </tr>
             `).join('');
@@ -431,4 +368,3 @@
     </script>
 </body>
 </html>
-
