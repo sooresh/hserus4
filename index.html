@@ -1,156 +1,245 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>hserus4</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{margin:0;padding:16px;background:#07121a;color:#e6f3f6;font-family:Arial}
-h1{font-size:18px;margin:0}
-.controls{display:flex;gap:10px;align-items:center;margin-top:8px}
-button{padding:8px 14px;border:none;border-radius:6px;background:#7be3c7;color:#022;cursor:pointer}
-button:disabled{opacity:.5}
-.small{font-size:13px;color:#9fb6c7}
-#bar{height:10px;background:#122;border-radius:6px;overflow:hidden;margin-top:12px}
-#fill{height:100%;width:0%;background:linear-gradient(90deg,#7be3c7,#2bd18a)}
-table{width:100%;border-collapse:collapse;margin-top:14px;background:#0b2230}
-th,td{padding:9px;border-bottom:1px solid #123;text-align:right}
-th{cursor:pointer;color:#9fb6c7}
-td.symbol{text-align:left;color:#7bdfff;font-weight:bold}
-.green{color:#7be3c7}
-.red{color:#ff6b6b}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hserus4</title>
+    <style>
+        :root {
+            --bg: #0b0e11;
+            --card: #181a20;
+            --text: #eaecef;
+            --accent: #f0b90b;
+            --green: #02c076;
+            --red: #f84960;
+            --border: #2b2f36;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Progress Bar */
+        .progress-wrapper {
+            background: var(--card);
+            border-radius: 10px;
+            height: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+
+        .status-text {
+            font-size: 12px;
+            color: #848e9c;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th {
+            background: #2b2f36;
+            padding: 12px;
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+            font-size: 13px;
+            color: #848e9c;
+        }
+
+        th:hover { color: var(--text); }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .pos { color: var(--green); }
+        .neg { color: var(--red); }
+        .funding-val { font-family: monospace; }
+    </style>
 </head>
 <body>
 
-<h1>hserus4</h1>
+<div class="container">
+    <div class="header">
+        <h2>hserus4</h2>
+        <button id="refresh-btn">REFRESH</button>
+    </div>
 
-<div class="controls">
-  <button id="refresh">Refresh</button>
-  <div id="status" class="small">Idle</div>
+    <div class="progress-wrapper">
+        <div id="progress-bar"></div>
+    </div>
+    <div id="status" class="status-text">hserus4</div>
+
+    <table id="scanner-table">
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)">Symbol</th>
+                <th onclick="sortTable(1)">Funding</th>
+                <th onclick="sortTable(2)">Price Chg</th>
+                <th onclick="sortTable(3)">Vol Chg</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            </tbody>
+    </table>
 </div>
 
-<div id="bar"><div id="fill"></div></div>
-
-<table>
-<thead>
-<tr>
-  <th>Symbol</th>
-  <th>Close%</th>
-</tr>
-</thead>
-<tbody id="tbody">
-<tr><td colspan="2" class="small">Click Refresh</td></tr>
-</tbody>
-</table>
-
 <script>
-const BASE = 'https://fapi.binance.com';
-const BATCH = 5;
-const MAX = 250;
+    const API_BASE = "https://fapi.binance.com/fapi/v1";
+    const EXCLUDE = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT", "LTCUSDT", "TRXUSDT"];
+    const BATCH_SIZE = 5;
 
-const EXCLUDE = new Set([
-"BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT",
-"DOTUSDT","TRXUSDT","LINKUSDT","LTCUSDT","BCHUSDT","ATOMUSDT","FILUSDT","APTUSDT","SUIUSDT"
-]);
+    let scanData = [];
 
-const tbody = document.getElementById('tbody');
-const fill = document.getElementById('fill');
-const status = document.getElementById('status');
-const btn = document.getElementById('refresh');
+    async function fetchJSON(url) {
+        const res = await fetch(url);
+        return res.json();
+    }
 
-const pct = (a,b)=>((a-b)/b)*100;
-const j = async u => {
-  const r = await fetch(u);
-  if(!r.ok) throw 0;
-  return r.json();
-};
+    async function startScan() {
+        const btn = document.getElementById('refresh-btn');
+        const status = document.getElementById('status');
+        const progressBar = document.getElementById('progress-bar');
+        const tbody = document.getElementById('table-body');
+        
+        btn.disabled = true;
+        scanData = [];
+        tbody.innerHTML = "";
+        progressBar.style.width = "0%";
 
-async function getSymbols(){
-  const [ei,t] = await Promise.all([
-    j(BASE+'/exchangeInfo'),
-    j(BASE+'/ticker/24hr')
-  ]);
-  const perp = new Set(
-    ei.symbols
-      .filter(s=>s.contractType==='PERPETUAL' && s.symbol.endsWith('USDT'))
-      .map(s=>s.symbol)
-  );
-  return t
-    .filter(x=>perp.has(x.symbol) && !EXCLUDE.has(x.symbol))
-    .map(x=>({s:x.symbol,score:Math.abs(x.priceChangePercent)*x.quoteVolume}))
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,MAX)
-    .map(x=>x.s);
-}
+        try {
+            status.innerText = "Step 1: Analyzing 24h Volatility...";
+            const ticker24 = await fetchJSON(`${API_BASE}/ticker/24hr`);
+            
+            // Filter top 250 volatile USDT Perps
+            let symbols = ticker24
+                .filter(s => s.symbol.endsWith("USDT") && !EXCLUDE.includes(s.symbol))
+                .map(s => ({
+                    symbol: s.symbol,
+                    vol: (parseFloat(s.highPrice) - parseFloat(s.lowPrice)) / parseFloat(s.lowPrice)
+                }))
+                .sort((a, b) => b.vol - a.vol)
+                .slice(0, 250)
+                .map(s => s.symbol);
 
-async function scanSymbol(symbol){
-  try{
-    const [k, f] = await Promise.all([
-      j(`${BASE}/klines?symbol=${symbol}&interval=1h&limit=2`),
-      j(`${BASE}/premiumIndex?symbol=${symbol}`)
-    ]);
+            status.innerText = "Step 2: Filtering Negative Funding...";
+            const fundingInfo = await fetchJSON(`${API_BASE}/premiumIndex`);
+            const fundingMap = new Map();
+            fundingInfo.forEach(f => fundingMap.set(f.symbol, parseFloat(f.lastFundingRate)));
 
-    const funding = Number(f.lastFundingRate);
-    if (funding >= 0) return;
+            // Keep symbols where funding < 0
+            const targets = symbols.filter(s => fundingMap.get(s) < 0);
+            
+            status.innerText = `Step 3: Parallel fetching data for ${targets.length} symbols...`;
 
-    const o = +k[1][1];
-    const c = +k[1][4];
-    const cp = pct(c,o);
+            for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+                const batch = targets.slice(i, i + BATCH_SIZE);
+                
+                const results = await Promise.all(batch.map(async (symbol) => {
+                    const klines = await fetchJSON(`${API_BASE}/klines?symbol=${symbol}&interval=1h&limit=2`);
+                    if (klines.length < 2) return null;
 
-    return { symbol, cp };
-  }catch{
-    return;
-  }
-}
+                    const prev = klines[0];
+                    const curr = klines[1];
+                    
+                    const priceChg = ((curr[4] - curr[1]) / curr[1]) * 100;
+                    const volChg = ((curr[5] - prev[5]) / prev[5]) * 100;
+                    const funding = fundingMap.get(symbol);
 
-async function start(){
-  btn.disabled = true;
-  tbody.innerHTML = '';
-  fill.style.width = '0%';
-  status.textContent = 'Preparing scan…';
+                    return { symbol, funding, priceChg, volChg };
+                }));
 
-  const symbols = await getSymbols();
-  let done = 0;
+                scanData.push(...results.filter(r => r !== null));
+                
+                // Update UI Progress
+                const percent = Math.round(((i + batch.length) / targets.length) * 100);
+                progressBar.style.width = `${percent}%`;
+                renderTable();
+            }
 
-  for(let i=0;i<symbols.length;i+=BATCH){
-    const batch = symbols.slice(i,i+BATCH);
-    const res = await Promise.all(batch.map(scanSymbol));
+            status.innerText = `Scan Complete: ${scanData.length} symbols with negative funding found.`;
+        } catch (err) {
+            status.innerText = "Error fetching data. Check connection.";
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+        }
+    }
 
-    res.filter(Boolean).forEach(o=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="symbol">${o.symbol}</td>
-        <td class="${o.cp>=0?'green':'red'}">${o.cp.toFixed(2)}%</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    function renderTable() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = scanData.map(d => `
+            <tr>
+                <td><strong>${d.symbol}</strong></td>
+                <td class="funding-val neg">${(d.funding * 100).toFixed(4)}%</td>
+                <td class="${d.priceChg >= 0 ? 'pos' : 'neg'}">${d.priceChg.toFixed(2)}%</td>
+                <td class="${d.volChg >= 0 ? 'pos' : 'neg'}">${d.volChg.toFixed(1)}%</td>
+            </tr>
+        `).join('');
+    }
 
-    done += batch.length;
-    fill.style.width = (done/symbols.length*100)+'%';
-    status.textContent = `Scanning ${done}/${symbols.length}`;
-    await new Promise(r=>setTimeout(r,120));
-  }
+    function sortTable(n) {
+        const keys = ['symbol', 'funding', 'priceChg', 'volChg'];
+        const key = keys[n];
+        
+        const isAsc = this.lastSort === key;
+        scanData.sort((a, b) => {
+            if (typeof a[key] === 'string') {
+                return isAsc ? b[key].localeCompare(a[key]) : a[key].localeCompare(b[key]);
+            }
+            return isAsc ? a[key] - b[key] : b[key] - a[key];
+        });
+        
+        this.lastSort = isAsc ? null : key;
+        renderTable();
+    }
 
-  status.textContent = 'Scan complete';
-  btn.disabled = false;
-}
-
-btn.onclick = start;
-
-/* sorting */
-document.querySelectorAll('th').forEach((th,i)=>{
-  th.onclick=()=>{
-    const rows=[...tbody.rows];
-    const asc=th.asc=!th.asc;
-    rows.sort((a,b)=>{
-      const x=parseFloat(a.cells[i].innerText)||0;
-      const y=parseFloat(b.cells[i].innerText)||0;
-      return asc?x-y:y-x;
-    });
-    rows.forEach(r=>tbody.appendChild(r));
-  };
-});
+    document.getElementById('refresh-btn').onclick = startScan;
 </script>
+
 </body>
 </html>
