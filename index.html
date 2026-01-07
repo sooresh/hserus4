@@ -12,7 +12,7 @@
             --accent: #f0b90b;
             --green: #02c076;
             --red: #f84960;
-            --border: #2b2f36;
+            --border: #2b3139;
         }
 
         body {
@@ -23,7 +23,7 @@
             padding: 20px;
         }
 
-        .container { max-width: 1000px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
 
         .header {
             display: flex;
@@ -32,11 +32,21 @@
             margin-bottom: 20px;
         }
 
+        h1 { font-size: 1.5rem; color: var(--accent); }
+
+        .controls {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
         button {
             background-color: var(--accent);
             color: #000;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 24px;
             border-radius: 4px;
             font-weight: 600;
             cursor: pointer;
@@ -47,12 +57,12 @@
 
         /* Progress Bar */
         .progress-wrapper {
-            background: var(--card);
-            border-radius: 10px;
-            height: 8px;
-            margin-bottom: 10px;
+            margin-top: 15px;
+            background: #2b3139;
+            height: 10px;
+            border-radius: 5px;
             overflow: hidden;
-            border: 1px solid var(--border);
+            position: relative;
         }
 
         #progress-bar {
@@ -62,183 +72,203 @@
             transition: width 0.3s ease;
         }
 
-        .status-text {
-            font-size: 12px;
+        #status-text {
+            font-size: 0.85rem;
             color: #848e9c;
-            margin-bottom: 20px;
-            text-align: center;
+            margin-top: 8px;
+            display: block;
         }
 
-        /* Table */
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        /* Table Styles */
+        .table-container {
             background: var(--card);
             border-radius: 8px;
+            border: 1px solid var(--border);
             overflow: hidden;
         }
 
-        th {
-            background: #2b2f36;
-            padding: 12px;
+        table {
+            width: 100%;
+            border-collapse: collapse;
             text-align: left;
+        }
+
+        th {
+            background: #2b3139;
+            padding: 12px 16px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #848e9c;
             cursor: pointer;
             user-select: none;
-            font-size: 13px;
-            color: #848e9c;
         }
 
         th:hover { color: var(--text); }
 
         td {
-            padding: 12px;
+            padding: 12px 16px;
             border-bottom: 1px solid var(--border);
-            font-size: 14px;
+            font-size: 0.9rem;
         }
 
         .pos { color: var(--green); }
         .neg { color: var(--red); }
-        .funding-val { font-family: monospace; }
+        
+        .symbol-name { font-weight: 700; color: var(--accent); }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <h2>hserus4</h2>
+        <h1>hserus4</h1>
         <button id="refresh-btn">REFRESH</button>
     </div>
 
-    <div class="progress-wrapper">
-        <div id="progress-bar"></div>
+    <div class="controls">
+        <div class="progress-wrapper">
+            <div id="progress-bar"></div>
+        </div>
+        <span id="status-text">Click refresh to start scanning...</span>
     </div>
-    <div id="status" class="status-text">hserus4</div>
 
-    <table id="scanner-table">
-        <thead>
-            <tr>
-                <th onclick="sortTable(0)">Symbol</th>
-                <th onclick="sortTable(1)">Funding</th>
-                <th onclick="sortTable(2)">Price Chg</th>
-                <th onclick="sortTable(3)">Vol Chg</th>
-            </tr>
-        </thead>
-        <tbody id="table-body">
+    <div class="table-container">
+        <table id="scanner-table">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0, 'string')">Symbol</th>
+                    <th onclick="sortTable(1, 'number')">Close %</th>
+                    <th onclick="sortTable(2, 'number')">Vol %</th>
+                    <th onclick="sortTable(3, 'number')">Prev Vol%</th>
+                    <th onclick="sortTable(4, 'number')">Prev Close%</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <tr><td colspan="5" style="text-align:center; padding: 40px; color:#848e9c;">No data loaded.</td></tr>
             </tbody>
-    </table>
+        </table>
+    </div>
 </div>
 
 <script>
     const API_BASE = "https://fapi.binance.com/fapi/v1";
-    const EXCLUDE = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT", "LTCUSDT", "TRXUSDT"];
+    const EXCLUDE_LIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT"];
     const BATCH_SIZE = 5;
+    let tableData = [];
 
-    let scanData = [];
+    const refreshBtn = document.getElementById('refresh-btn');
+    const progressBar = document.getElementById('progress-bar');
+    const statusText = document.getElementById('status-text');
+    const tableBody = document.getElementById('table-body');
 
-    async function fetchJSON(url) {
-        const res = await fetch(url);
-        return res.json();
+    async function fetchTickers() {
+        const response = await fetch(`${API_BASE}/ticker/24hr`);
+        const data = await response.json();
+        return data
+            .filter(item => item.symbol.endsWith("USDT") && !EXCLUDE_LIST.includes(item.symbol))
+            .map(item => ({
+                symbol: item.symbol,
+                volatility: (parseFloat(item.highPrice) - parseFloat(item.lowPrice)) / parseFloat(item.lowPrice)
+            }))
+            .sort((a, b) => b.volatility - a.volatility)
+            .slice(0, 250);
+    }
+
+    async function getKlines(symbol) {
+        try {
+            const response = await fetch(`${API_BASE}/klines?symbol=${symbol}&interval=1h&limit=3`);
+            return await response.json();
+        } catch (e) { return null; }
+    }
+
+    function checkConditions(klines) {
+        if (!klines || klines.length < 3) return null;
+        
+        const pprev = klines[0]; // Prev-Prev
+        const prev = klines[1];  // Previous
+        const curr = klines[2];  // Current
+
+        // 1. Color check (index 1: open, index 4: close)
+        const isCurrGreen = parseFloat(curr[4]) >= parseFloat(curr[1]);
+        const isPrevGreen = parseFloat(prev[4]) >= parseFloat(prev[1]);
+        if (isCurrGreen !== isPrevGreen) return null;
+
+        // 2. Volume check (index 5: volume)
+        const currVol = parseFloat(curr[5]);
+        const prevVol = parseFloat(prev[5]);
+        const pprevVol = parseFloat(pprev[5]);
+        if (!(currVol > prevVol && prevVol > pprevVol)) return null;
+
+        // Calculations
+        const currClose = parseFloat(curr[4]);
+        const currOpen = parseFloat(curr[1]);
+        const prevClose = parseFloat(prev[4]);
+        const prevOpen = parseFloat(prev[1]);
+
+        return {
+            currCloseChg: ((currClose - currOpen) / currOpen * 100),
+            currVolChg: ((currVol - prevVol) / prevVol * 100),
+            prevVolChg: ((prevVol - pprevVol) / pprevVol * 100),
+            prevCloseChg: ((prevClose - prevOpen) / prevOpen * 100)
+        };
     }
 
     async function startScan() {
-        const btn = document.getElementById('refresh-btn');
-        const status = document.getElementById('status');
-        const progressBar = document.getElementById('progress-bar');
-        const tbody = document.getElementById('table-body');
-        
-        btn.disabled = true;
-        scanData = [];
-        tbody.innerHTML = "";
+        refreshBtn.disabled = true;
+        tableData = [];
         progressBar.style.width = "0%";
+        statusText.innerText = "Fetching top 250 volatile assets...";
+        
+        const symbols = await fetchTickers();
+        const total = symbols.length;
+        
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+            const batch = symbols.slice(i, i + BATCH_SIZE);
+            const results = await Promise.all(batch.map(async (s) => {
+                const klines = await getKlines(s.symbol);
+                const stats = checkConditions(klines);
+                return stats ? { symbol: s.symbol, ...stats } : null;
+            }));
 
-        try {
-            status.innerText = "Step 1: Analyzing 24h Volatility...";
-            const ticker24 = await fetchJSON(`${API_BASE}/ticker/24hr`);
+            results.forEach(res => { if (res) tableData.push(res); });
             
-            // Filter top 250 volatile USDT Perps
-            let symbols = ticker24
-                .filter(s => s.symbol.endsWith("USDT") && !EXCLUDE.includes(s.symbol))
-                .map(s => ({
-                    symbol: s.symbol,
-                    vol: (parseFloat(s.highPrice) - parseFloat(s.lowPrice)) / parseFloat(s.lowPrice)
-                }))
-                .sort((a, b) => b.vol - a.vol)
-                .slice(0, 250)
-                .map(s => s.symbol);
-
-            status.innerText = "Step 2: Filtering Negative Funding...";
-            const fundingInfo = await fetchJSON(`${API_BASE}/premiumIndex`);
-            const fundingMap = new Map();
-            fundingInfo.forEach(f => fundingMap.set(f.symbol, parseFloat(f.lastFundingRate)));
-
-            // Keep symbols where funding < 0
-            const targets = symbols.filter(s => fundingMap.get(s) < 0);
-            
-            status.innerText = `Step 3: Parallel fetching data for ${targets.length} symbols...`;
-
-            for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-                const batch = targets.slice(i, i + BATCH_SIZE);
-                
-                const results = await Promise.all(batch.map(async (symbol) => {
-                    const klines = await fetchJSON(`${API_BASE}/klines?symbol=${symbol}&interval=1h&limit=2`);
-                    if (klines.length < 2) return null;
-
-                    const prev = klines[0];
-                    const curr = klines[1];
-                    
-                    const priceChg = ((curr[4] - curr[1]) / curr[1]) * 100;
-                    const volChg = ((curr[5] - prev[5]) / prev[5]) * 100;
-                    const funding = fundingMap.get(symbol);
-
-                    return { symbol, funding, priceChg, volChg };
-                }));
-
-                scanData.push(...results.filter(r => r !== null));
-                
-                // Update UI Progress
-                const percent = Math.round(((i + batch.length) / targets.length) * 100);
-                progressBar.style.width = `${percent}%`;
-                renderTable();
-            }
-
-            status.innerText = `Scan Complete: ${scanData.length} symbols with negative funding found.`;
-        } catch (err) {
-            status.innerText = "Error fetching data. Check connection.";
-            console.error(err);
-        } finally {
-            btn.disabled = false;
+            const progress = ((i + batch.length) / total) * 100;
+            progressBar.style.width = `${progress}%`;
+            statusText.innerText = `Scanning ${i + batch.length} / ${total} symbols... Found: ${tableData.length}`;
+            renderTable();
         }
+
+        statusText.innerText = `Scan Complete. Found ${tableData.length} symbols matching conditions.`;
+        refreshBtn.disabled = false;
     }
 
     function renderTable() {
-        const tbody = document.getElementById('table-body');
-        tbody.innerHTML = scanData.map(d => `
+        tableBody.innerHTML = tableData.map(row => `
             <tr>
-                <td><strong>${d.symbol}</strong></td>
-                <td class="funding-val neg">${(d.funding * 100).toFixed(4)}%</td>
-                <td class="${d.priceChg >= 0 ? 'pos' : 'neg'}">${d.priceChg.toFixed(2)}%</td>
-                <td class="${d.volChg >= 0 ? 'pos' : 'neg'}">${d.volChg.toFixed(1)}%</td>
+                <td class="symbol-name">${row.symbol}</td>
+                <td class="${row.currCloseChg >= 0 ? 'pos' : 'neg'}">${row.currCloseChg.toFixed(2)}%</td>
+                <td class="pos">+${row.currVolChg.toFixed(1)}%</td>
+                <td class="pos">+${row.prevVolChg.toFixed(1)}%</td>
+                <td class="${row.prevCloseChg >= 0 ? 'pos' : 'neg'}">${row.prevCloseChg.toFixed(2)}%</td>
             </tr>
-        `).join('');
+        `).join('') || `<tr><td colspan="5" style="text-align:center; padding: 20px;">Scanning...</td></tr>`;
     }
 
-    function sortTable(n) {
-        const keys = ['symbol', 'funding', 'priceChg', 'volChg'];
-        const key = keys[n];
-        
-        const isAsc = this.lastSort === key;
-        scanData.sort((a, b) => {
-            if (typeof a[key] === 'string') {
-                return isAsc ? b[key].localeCompare(a[key]) : a[key].localeCompare(b[key]);
-            }
-            return isAsc ? a[key] - b[key] : b[key] - a[key];
+    let sortOrder = 1;
+    function sortTable(columnIndex, type) {
+        sortOrder *= -1;
+        tableData.sort((a, b) => {
+            const keys = ['symbol', 'currCloseChg', 'currVolChg', 'prevVolChg', 'prevCloseChg'];
+            const valA = a[keys[columnIndex]];
+            const valB = b[keys[columnIndex]];
+            
+            if (type === 'string') return valA.localeCompare(valB) * sortOrder;
+            return (valA - valB) * sortOrder;
         });
-        
-        this.lastSort = isAsc ? null : key;
         renderTable();
     }
 
-    document.getElementById('refresh-btn').onclick = startScan;
+    refreshBtn.addEventListener('click', startScan);
 </script>
 
 </body>
