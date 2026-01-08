@@ -1,182 +1,415 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>hserus4</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hserus4</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --green: #22c55e;
+            --red: #ef4444;
+            --border: #334155;
+        }
 
-<style>
-body{margin:0;padding:16px;background:#07121a;color:#e6f3f6;font-family:Arial}
-h1{font-size:18px;margin:0}
-.controls{display:flex;gap:10px;align-items:center;margin-top:10px}
-button{padding:8px 14px;border:none;border-radius:6px;background:#7be3c7;color:#022;cursor:pointer}
-button:disabled{opacity:.5}
-.small{font-size:13px;color:#9fb6c7}
-#bar{height:10px;background:#122;border-radius:6px;overflow:hidden;margin-top:12px}
-#fill{height:100%;width:0%;background:linear-gradient(90deg,#7be3c7,#2bd18a);transition:.25s}
-table{width:100%;border-collapse:collapse;margin-top:14px;background:#0b2230}
-th,td{padding:9px;border-bottom:1px solid #123;text-align:right}
-th{cursor:pointer;color:#9fb6c7}
-td.symbol{text-align:left;color:#7bdfff;font-weight:bold}
-.green{color:#7be3c7}
-.red{color:#ff6b6b}
-</style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Header & Controls */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: var(--accent-hover); }
+        button:disabled { background-color: var(--text-secondary); cursor: not-allowed; }
+
+        /* Progress Bar */
+        .progress-container {
+            height: 6px;
+            background-color: var(--border);
+            border-radius: 3px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--green);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-text {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            height: 20px;
+        }
+
+        /* Table */
+        .table-wrapper {
+            background: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: #1a2333;
+            color: var(--text-secondary);
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            position: sticky;
+            top: 0;
+        }
+
+        th:hover { color: var(--text-primary); }
+
+        /* Sort Icons */
+        th::after {
+            content: '↕';
+            font-size: 10px;
+            margin-left: 5px;
+            opacity: 0.3;
+        }
+        th.asc::after { content: '↑'; opacity: 1; }
+        th.desc::after { content: '↓'; opacity: 1; }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: #263345; }
+
+        /* Utility Colors */
+        .text-green { color: var(--green); }
+        .text-red { color: var(--red); }
+        .mono { font-family: 'SF Mono', 'Roboto Mono', monospace; }
+        
+        .filters-note {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+    </style>
 </head>
 <body>
 
-<h1>hserus4</h1>
+<div class="container">
+    <header>
+        <div>
+            <h1>hserus4</h1>
+            <div class="filters-note">hserus4</div>
+        </div>
+        <button id="scanBtn" onclick="startScan()">Start Scan</button>
+    </header>
 
-<div class="controls">
-  <button id="refresh">Refresh</button>
-  <div id="status" class="small">Idle</div>
+    <div class="status-text" id="statusText">Ready to scan...</div>
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="table-wrapper">
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">Symbol</th>
+                    <th onclick="sortTable(1)">Price</th>
+                    <th onclick="sortTable(2)">Chg %</th>
+                    <th onclick="sortTable(3)">Vol Chg %</th>
+                    <th onclick="sortTable(4)">ATR Mult</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                </tbody>
+        </table>
+    </div>
 </div>
 
-<div id="bar"><div id="fill"></div></div>
-
-<table>
-<thead>
-<tr>
-  <th>Symbol</th>
-  <th>Close%</th>
-  <th>Vol%</th>
-</tr>
-</thead>
-<tbody id="tbody">
-<tr><td colspan="3" class="small">Click Refresh</td></tr>
-</tbody>
-</table>
-
 <script>
-const BASE = 'https://fapi.binance.com';
-const BATCH = 5;
-const MAX = 250;
+    // --- Configuration ---
+    const BASE_API = 'https://fapi.binance.com';
+    // Major coins to exclude (Simulating Market Cap exclusion)
+    const EXCLUDED_COINS = new Set([
+        'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 
+        'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'TRXUSDT', 'DOTUSDT',
+        'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'LINKUSDT', 'SHIBUSDT'
+    ]);
+    
+    // --- State ---
+    let scanResults = [];
+    let isScanning = false;
 
-const EXCLUDE = new Set([
-"BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
-"AVAXUSDT","DOTUSDT","LINKUSDT","LTCUSDT"
-]);
+    // --- Utility Functions ---
+    const delay = ms => new Promise(res => setTimeout(res, ms));
 
-const tbody = document.getElementById('tbody');
-const fill = document.getElementById('fill');
-const status = document.getElementById('status');
-const btn = document.getElementById('refresh');
+    // --- Main Logic ---
 
-const pct = (a,b)=>((a-b)/b)*100;
+    async function startScan() {
+        if (isScanning) return;
+        isScanning = true;
+        
+        const btn = document.getElementById('scanBtn');
+        const pBar = document.getElementById('progressBar');
+        const status = document.getElementById('statusText');
+        const tbody = document.getElementById('tableBody');
 
-async function safeFetch(url){
-  try{
-    const r = await fetch(url);
-    if(!r.ok) return null;
-    return r.json();
-  }catch{
-    return null;
-  }
-}
+        btn.disabled = true;
+        btn.innerText = "Scanning...";
+        pBar.style.width = '0%';
+        tbody.innerHTML = '';
+        scanResults = [];
 
-/* Get volatile symbols safely */
-async function getSymbols(){
-  const data = await safeFetch(`${BASE}/premiumIndex`);
-  if(!data) return [];
+        try {
+            status.innerText = "Fetching market data...";
+            
+            // 1. Fetch 24hr stats to find top volatile pairs
+            const tickerRes = await fetch(`${BASE_API}/fapi/v1/ticker/24hr`);
+            const tickers = await tickerRes.json();
 
-  return data
-    .filter(x =>
-      x.symbol.endsWith('USDT') &&
-      !EXCLUDE.has(x.symbol)
-    )
-    .slice(0, MAX)
-    .map(x => x.symbol);
-}
+            // 2. Filter and Sort
+            let candidates = tickers.filter(t => 
+                t.symbol.endsWith('USDT') && 
+                !EXCLUDED_COINS.has(t.symbol)
+            );
 
-/* ATR(14) */
-function calcATR(kl){
-  let trs = [];
-  for(let i=1;i<kl.length;i++){
-    const h = +kl[i][2];
-    const l = +kl[i][3];
-    const pc = +kl[i-1][4];
-    trs.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)));
-  }
-  return trs.reduce((a,b)=>a+b,0)/trs.length;
-}
+            // Calculate Volatility Metric: (High - Low) / Low
+            candidates.forEach(c => {
+                const high = parseFloat(c.highPrice);
+                const low = parseFloat(c.lowPrice);
+                c.volatility = (low > 0) ? (high - low) / low : 0;
+            });
 
-async function scanSymbol(symbol){
-  const kl = await safeFetch(`${BASE}/klines?symbol=${symbol}&interval=1h&limit=16`);
-  if(!kl || kl.length < 16) return null;
+            // Sort by volatility desc and take top 250
+            candidates.sort((a, b) => b.volatility - a.volatility);
+            const top250 = candidates.slice(0, 250);
 
-  const cur = kl[kl.length-1];
-  const prev = kl[kl.length-2];
+            status.innerText = `Scanning top ${top250.length} volatile pairs...`;
 
-  const o = +cur[1], h = +cur[2], l = +cur[3], c = +cur[4], v = +cur[5];
-  const pv = +prev[5];
+            // 3. Process in Batches
+            const BATCH_SIZE = 5;
+            let completed = 0;
 
-  if(v <= pv) return null;
+            for (let i = 0; i < top250.length; i += BATCH_SIZE) {
+                const batch = top250.slice(i, i + BATCH_SIZE);
+                
+                // Parallel fetch for the batch
+                const promises = batch.map(coin => analyzeSymbol(coin.symbol));
+                const results = await Promise.all(promises);
 
-  const atr = calcATR(kl.slice(0,15));
-  const range = h - l;
+                // Add valid results to table immediately
+                results.forEach(res => {
+                    if (res) {
+                        scanResults.push(res);
+                        addRowToTable(res);
+                    }
+                });
 
-  if(range <= atr) return null;
+                completed += batch.length;
+                const pct = Math.min((completed / top250.length) * 100, 100);
+                pBar.style.width = `${pct}%`;
+                status.innerText = `Scanning... ${completed}/${top250.length}`;
 
-  return {
-    symbol,
-    closePct: pct(c,o),
-    volPct: pct(v,pv)
-  };
-}
+                // Rate limit protection
+                await delay(150); 
+            }
 
-async function start(){
-  btn.disabled = true;
-  tbody.innerHTML = '';
-  fill.style.width = '0%';
-  status.textContent = 'Preparing scan…';
+            status.innerText = `Scan Complete. Found ${scanResults.length} matches.`;
 
-  const symbols = await getSymbols();
-  if(!symbols.length){
-    status.textContent = 'No symbols fetched';
-    btn.disabled = false;
-    return;
-  }
+        } catch (error) {
+            console.error(error);
+            status.innerText = "Error: " + error.message;
+        } finally {
+            isScanning = false;
+            btn.disabled = false;
+            btn.innerText = "Refresh";
+        }
+    }
 
-  let done = 0;
+    async function analyzeSymbol(symbol) {
+        try {
+            // Fetch 1h candles. Limit 20 is enough for ATR(14)
+            const res = await fetch(`${BASE_API}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=20`);
+            const data = await res.json();
+            
+            if (!data || data.length < 16) return null;
 
-  for(let i=0;i<symbols.length;i+=BATCH){
-    const batch = symbols.slice(i,i+BATCH);
-    const res = await Promise.all(batch.map(scanSymbol));
+            // Candles: [Open Time, Open, High, Low, Close, Volume, ...]
+            // Index: 0=Time, 1=Open, 2=High, 3=Low, 4=Close, 5=Vol
+            
+            // We need the Current Candle (last in array, still forming) 
+            // and Previous Candle (second to last, closed)
+            const current = data[data.length - 1];
+            const prev = data[data.length - 2];
 
-    res.filter(Boolean).forEach(o=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="symbol">${o.symbol}</td>
-        <td class="${o.closePct>=0?'green':'red'}">${o.closePct.toFixed(2)}%</td>
-        <td>${o.volPct.toFixed(2)}%</td>
-      `;
-      tbody.appendChild(tr);
-    });
+            const curVol = parseFloat(current[5]);
+            const prevVol = parseFloat(prev[5]);
 
-    done += batch.length;
-    fill.style.width = (done/symbols.length*100)+'%';
-    status.textContent = `Scanning ${done}/${symbols.length}`;
-    await new Promise(r=>setTimeout(r,120));
-  }
+            // CONDITION 1: Current Volume > Previous Volume
+            if (curVol <= prevVol) return null;
 
-  status.textContent = 'Scan complete';
-  btn.disabled = false;
-}
+            // Calculate ATR(14) based on previous 14 closed candles
+            // We use data indices: data.length - 16 to data.length - 2
+            let trSum = 0;
+            // Using standard simplified ATR loop on the last 14 CLOSED candles
+            for (let i = data.length - 15; i <= data.length - 2; i++) {
+                const c = data[i];
+                const p = data[i-1];
+                
+                const high = parseFloat(c[2]);
+                const low = parseFloat(c[3]);
+                const prevClose = parseFloat(p[4]);
 
-btn.onclick = start;
+                const tr = Math.max(
+                    high - low,
+                    Math.abs(high - prevClose),
+                    Math.abs(low - prevClose)
+                );
+                trSum += tr;
+            }
+            const atr14 = trSum / 14;
 
-/* Sorting */
-document.querySelectorAll('th').forEach((th,i)=>{
-  th.onclick=()=>{
-    const rows=[...tbody.rows];
-    const asc=th.asc=!th.asc;
-    rows.sort((a,b)=>{
-      const x=parseFloat(a.cells[i].innerText)||0;
-      const y=parseFloat(b.cells[i].innerText)||0;
-      return asc?x-y:y-x;
-    });
-    rows.forEach(r=>tbody.appendChild(r));
-  };
-});
+            // CONDITION 2: Current Candle Range > ATR(14)
+            const curHigh = parseFloat(current[2]);
+            const curLow = parseFloat(current[3]);
+            const curRange = curHigh - curLow;
+
+            if (curRange <= atr14) return null;
+
+            // If passed, prepare data object
+            const curClose = parseFloat(current[4]);
+            const curOpen = parseFloat(current[1]);
+            const priceChg = ((curClose - curOpen) / curOpen) * 100; // Change of current candle
+            const volChg = ((curVol - prevVol) / prevVol) * 100;
+            const atrMult = curRange / atr14;
+
+            return {
+                symbol: symbol,
+                price: curClose,
+                chg: priceChg,
+                volChg: volChg,
+                atrMult: atrMult
+            };
+
+        } catch (e) {
+            console.error(`Error analyzing ${symbol}`, e);
+            return null;
+        }
+    }
+
+    // --- UI Functions ---
+
+    function addRowToTable(data) {
+        const tbody = document.getElementById('tableBody');
+        const row = document.createElement('tr');
+        
+        const chgClass = data.chg >= 0 ? 'text-green' : 'text-red';
+        const chgSign = data.chg >= 0 ? '+' : '';
+
+        row.innerHTML = `
+            <td class="mono"><b>${data.symbol}</b></td>
+            <td class="mono">${data.price.toFixed(4)}</td>
+            <td class="mono ${chgClass}">${chgSign}${data.chg.toFixed(2)}%</td>
+            <td class="mono text-green">+${data.volChg.toFixed(0)}%</td>
+            <td class="mono">${data.atrMult.toFixed(2)}x</td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    // --- Sorting Logic ---
+    let sortDir = 1; // 1 = asc, -1 = desc
+    let lastSortIdx = -1;
+
+    function sortTable(n) {
+        const table = document.getElementById("resultsTable");
+        const tbody = document.getElementById("tableBody");
+        const rows = Array.from(tbody.rows);
+        const headers = table.querySelectorAll("th");
+
+        // Handle Sort Direction UI
+        headers.forEach(h => h.classList.remove('asc', 'desc'));
+        if (lastSortIdx === n) {
+            sortDir *= -1;
+        } else {
+            sortDir = 1; // Default to Ascending on new column? 
+            // Actually usually Descedning is better for numbers, let's toggle logic
+            // Default Descending for numbers (Indices 1,2,3,4), Ascending for Text (0)
+            if(n !== 0) sortDir = -1; 
+        }
+        lastSortIdx = n;
+        headers[n].classList.add(sortDir === 1 ? 'asc' : 'desc');
+
+        rows.sort((rA, rB) => {
+            const cellA = rA.cells[n].innerText;
+            const cellB = rB.cells[n].innerText;
+
+            // Helper to clean string for number parsing
+            const clean = (str) => parseFloat(str.replace(/[^0-9.-]/g, ''));
+
+            let valA, valB;
+
+            if (n === 0) { // Symbol (String)
+                valA = cellA.toLowerCase();
+                valB = cellB.toLowerCase();
+                if (valA < valB) return -1 * sortDir;
+                if (valA > valB) return 1 * sortDir;
+                return 0;
+            } else { // Numbers
+                valA = clean(cellA);
+                valB = clean(cellB);
+                return (valA - valB) * sortDir;
+            }
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
 </script>
+
 </body>
 </html>
