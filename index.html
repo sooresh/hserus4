@@ -27,7 +27,7 @@
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
         }
 
@@ -110,6 +110,7 @@
             user-select: none;
             position: sticky;
             top: 0;
+            white-space: nowrap;
         }
 
         th:hover { color: var(--text-primary); }
@@ -137,6 +138,18 @@
             color: var(--text-secondary);
             margin-top: 5px;
         }
+        
+        /* New badge style for SMA */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.05);
+        }
+        .badge.above { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+        .badge.below { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+
     </style>
 </head>
 <body>
@@ -163,7 +176,7 @@
                     <th onclick="sortTable(1)">Price</th>
                     <th onclick="sortTable(2)">Chg %</th>
                     <th onclick="sortTable(3)">Vol Chg %</th>
-                    <th onclick="sortTable(4)">ATR Mult</th>
+                    <th onclick="sortTable(4)">SMA 20</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -175,7 +188,7 @@
 <script>
     // --- Configuration ---
     const BASE_API = 'https://fapi.binance.com';
-    // Major coins to exclude (Simulating Market Cap exclusion)
+    // Major coins to exclude
     const EXCLUDED_COINS = new Set([
         'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 
         'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'TRXUSDT', 'DOTUSDT',
@@ -274,18 +287,18 @@
 
     async function analyzeSymbol(symbol) {
         try {
-            // Fetch 1h candles. Limit 20 is enough for ATR(14)
-            const res = await fetch(`${BASE_API}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=20`);
+            // Fetch 1h candles. Limit 35 to ensure we have enough for ATR(14) and SMA(20)
+            const res = await fetch(`${BASE_API}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=35`);
             const data = await res.json();
             
-            if (!data || data.length < 16) return null;
+            // Need at least 25 candles to calculate SMA20 safely based on closed candles + ATR
+            if (!data || data.length < 25) return null;
 
-            // Candles: [Open Time, Open, High, Low, Close, Volume, ...]
-            // Index: 0=Time, 1=Open, 2=High, 3=Low, 4=Close, 5=Vol
+            // Candles: 0=Time, 1=Open, 2=High, 3=Low, 4=Close, 5=Vol
             
-            // We need the Current Candle (last in array, still forming) 
-            // and Previous Candle (second to last, closed)
+            // Current Candle (Still forming)
             const current = data[data.length - 1];
+            // Previous Candle (Closed)
             const prev = data[data.length - 2];
 
             const curVol = parseFloat(current[5]);
@@ -294,11 +307,13 @@
             // CONDITION 1: Current Volume > Previous Volume
             if (curVol <= prevVol) return null;
 
-            // Calculate ATR(14) based on previous 14 closed candles
-            // We use data indices: data.length - 16 to data.length - 2
+            // --- ATR Calculation ---
+            // Using last 14 CLOSED candles (excluding current forming one)
             let trSum = 0;
-            // Using standard simplified ATR loop on the last 14 CLOSED candles
-            for (let i = data.length - 15; i <= data.length - 2; i++) {
+            const atrStart = data.length - 16; // Start index for ATR
+            const atrEnd = data.length - 2;   // End index for ATR
+
+            for (let i = atrStart; i <= atrEnd; i++) {
                 const c = data[i];
                 const p = data[i-1];
                 
@@ -322,19 +337,33 @@
 
             if (curRange <= atr14) return null;
 
-            // If passed, prepare data object
+            // --- SMA 20 Calculation ---
+            // Using last 20 CLOSED candles for a stable support/resistance level
+            let smaSum = 0;
+            const smaStart = data.length - 21;
+            const smaEnd = data.length - 2;
+            
+            for (let i = smaStart; i <= smaEnd; i++) {
+                smaSum += parseFloat(data[i][4]); // Close price
+            }
+            const sma20 = smaSum / 20;
+
+            // Prepare Result
             const curClose = parseFloat(current[4]);
             const curOpen = parseFloat(current[1]);
-            const priceChg = ((curClose - curOpen) / curOpen) * 100; // Change of current candle
+            const priceChg = ((curClose - curOpen) / curOpen) * 100;
             const volChg = ((curVol - prevVol) / prevVol) * 100;
-            const atrMult = curRange / atr14;
+            
+            // Determine SMA Position
+            const isAboveSma = curClose > sma20;
 
             return {
                 symbol: symbol,
                 price: curClose,
                 chg: priceChg,
                 volChg: volChg,
-                atrMult: atrMult
+                isAboveSma: isAboveSma,
+                smaValue: sma20 // Storing value for potential sorting/debugging
             };
 
         } catch (e) {
@@ -351,13 +380,17 @@
         
         const chgClass = data.chg >= 0 ? 'text-green' : 'text-red';
         const chgSign = data.chg >= 0 ? '+' : '';
+        
+        // SMA Badge Logic
+        const smaClass = data.isAboveSma ? 'above' : 'below';
+        const smaText = data.isAboveSma ? 'Above' : 'Below';
 
         row.innerHTML = `
             <td class="mono"><b>${data.symbol}</b></td>
             <td class="mono">${data.price.toFixed(4)}</td>
             <td class="mono ${chgClass}">${chgSign}${data.chg.toFixed(2)}%</td>
             <td class="mono text-green">+${data.volChg.toFixed(0)}%</td>
-            <td class="mono">${data.atrMult.toFixed(2)}x</td>
+            <td><span class="badge ${smaClass}">${smaText}</span></td>
         `;
         tbody.appendChild(row);
     }
@@ -377,10 +410,8 @@
         if (lastSortIdx === n) {
             sortDir *= -1;
         } else {
-            sortDir = 1; // Default to Ascending on new column? 
-            // Actually usually Descedning is better for numbers, let's toggle logic
-            // Default Descending for numbers (Indices 1,2,3,4), Ascending for Text (0)
-            if(n !== 0) sortDir = -1; 
+            sortDir = 1; 
+            if(n !== 0) sortDir = -1; // Default Desc for numbers, Asc for Symbol
         }
         lastSortIdx = n;
         headers[n].classList.add(sortDir === 1 ? 'asc' : 'desc');
@@ -389,17 +420,22 @@
             const cellA = rA.cells[n].innerText;
             const cellB = rB.cells[n].innerText;
 
-            // Helper to clean string for number parsing
             const clean = (str) => parseFloat(str.replace(/[^0-9.-]/g, ''));
 
             let valA, valB;
 
-            if (n === 0) { // Symbol (String)
+            if (n === 0) { // Symbol
                 valA = cellA.toLowerCase();
                 valB = cellB.toLowerCase();
                 if (valA < valB) return -1 * sortDir;
                 if (valA > valB) return 1 * sortDir;
                 return 0;
+            } else if (n === 4) { // SMA Column (Text: Above/Below)
+                 valA = cellA.toLowerCase();
+                 valB = cellB.toLowerCase();
+                 if (valA < valB) return -1 * sortDir;
+                 if (valA > valB) return 1 * sortDir;
+                 return 0;
             } else { // Numbers
                 valA = clean(cellA);
                 valB = clean(cellB);
