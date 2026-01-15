@@ -139,7 +139,7 @@
             margin-top: 5px;
         }
         
-        /* New badge style for SMA */
+        /* Badges */
         .badge {
             padding: 4px 8px;
             border-radius: 4px;
@@ -176,7 +176,8 @@
                     <th onclick="sortTable(1)">Price</th>
                     <th onclick="sortTable(2)">Chg %</th>
                     <th onclick="sortTable(3)">Vol Chg %</th>
-                    <th onclick="sortTable(4)">SMA 20</th>
+                    <th onclick="sortTable(4)">ATR Mult</th>
+                    <th onclick="sortTable(5)">SMA 20</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -287,18 +288,14 @@
 
     async function analyzeSymbol(symbol) {
         try {
-            // Fetch 1h candles. Limit 35 to ensure we have enough for ATR(14) and SMA(20)
+            // Fetch 1h candles. Limit 35
             const res = await fetch(`${BASE_API}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=35`);
             const data = await res.json();
             
-            // Need at least 25 candles to calculate SMA20 safely based on closed candles + ATR
             if (!data || data.length < 25) return null;
 
             // Candles: 0=Time, 1=Open, 2=High, 3=Low, 4=Close, 5=Vol
-            
-            // Current Candle (Still forming)
             const current = data[data.length - 1];
-            // Previous Candle (Closed)
             const prev = data[data.length - 2];
 
             const curVol = parseFloat(current[5]);
@@ -308,10 +305,9 @@
             if (curVol <= prevVol) return null;
 
             // --- ATR Calculation ---
-            // Using last 14 CLOSED candles (excluding current forming one)
             let trSum = 0;
-            const atrStart = data.length - 16; // Start index for ATR
-            const atrEnd = data.length - 2;   // End index for ATR
+            const atrStart = data.length - 16;
+            const atrEnd = data.length - 2;
 
             for (let i = atrStart; i <= atrEnd; i++) {
                 const c = data[i];
@@ -338,13 +334,12 @@
             if (curRange <= atr14) return null;
 
             // --- SMA 20 Calculation ---
-            // Using last 20 CLOSED candles for a stable support/resistance level
             let smaSum = 0;
             const smaStart = data.length - 21;
             const smaEnd = data.length - 2;
             
             for (let i = smaStart; i <= smaEnd; i++) {
-                smaSum += parseFloat(data[i][4]); // Close price
+                smaSum += parseFloat(data[i][4]);
             }
             const sma20 = smaSum / 20;
 
@@ -353,8 +348,7 @@
             const curOpen = parseFloat(current[1]);
             const priceChg = ((curClose - curOpen) / curOpen) * 100;
             const volChg = ((curVol - prevVol) / prevVol) * 100;
-            
-            // Determine SMA Position
+            const atrMult = curRange / atr14;
             const isAboveSma = curClose > sma20;
 
             return {
@@ -362,8 +356,8 @@
                 price: curClose,
                 chg: priceChg,
                 volChg: volChg,
-                isAboveSma: isAboveSma,
-                smaValue: sma20 // Storing value for potential sorting/debugging
+                atrMult: atrMult,
+                isAboveSma: isAboveSma
             };
 
         } catch (e) {
@@ -381,7 +375,6 @@
         const chgClass = data.chg >= 0 ? 'text-green' : 'text-red';
         const chgSign = data.chg >= 0 ? '+' : '';
         
-        // SMA Badge Logic
         const smaClass = data.isAboveSma ? 'above' : 'below';
         const smaText = data.isAboveSma ? 'Above' : 'Below';
 
@@ -390,6 +383,7 @@
             <td class="mono">${data.price.toFixed(4)}</td>
             <td class="mono ${chgClass}">${chgSign}${data.chg.toFixed(2)}%</td>
             <td class="mono text-green">+${data.volChg.toFixed(0)}%</td>
+            <td class="mono">${data.atrMult.toFixed(2)}x</td>
             <td><span class="badge ${smaClass}">${smaText}</span></td>
         `;
         tbody.appendChild(row);
@@ -411,7 +405,7 @@
             sortDir *= -1;
         } else {
             sortDir = 1; 
-            if(n !== 0) sortDir = -1; // Default Desc for numbers, Asc for Symbol
+            if(n !== 0 && n !== 5) sortDir = -1; // Desc for numbers, Asc for Text
         }
         lastSortIdx = n;
         headers[n].classList.add(sortDir === 1 ? 'asc' : 'desc');
@@ -424,18 +418,12 @@
 
             let valA, valB;
 
-            if (n === 0) { // Symbol
+            if (n === 0 || n === 5) { // Symbol or SMA Text
                 valA = cellA.toLowerCase();
                 valB = cellB.toLowerCase();
                 if (valA < valB) return -1 * sortDir;
                 if (valA > valB) return 1 * sortDir;
                 return 0;
-            } else if (n === 4) { // SMA Column (Text: Above/Below)
-                 valA = cellA.toLowerCase();
-                 valB = cellB.toLowerCase();
-                 if (valA < valB) return -1 * sortDir;
-                 if (valA > valB) return 1 * sortDir;
-                 return 0;
             } else { // Numbers
                 valA = clean(cellA);
                 valB = clean(cellB);
