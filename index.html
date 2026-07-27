@@ -62,7 +62,7 @@
 
         .controls {
             display: flex;
-            gap: 12px;
+            gap: 16px;
             align-items: center;
             margin-bottom: 20px;
         }
@@ -77,6 +77,7 @@
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s ease;
+            white-space: nowrap;
         }
 
         button:hover {
@@ -203,7 +204,7 @@
 </div>
 
 <script>
-    const API_BASE = 'https://fapi.binance.com/fapi/v1';
+    const API_BASE = 'https://fapi.binance.com';
     const TIMEFRAME = '1h';
     const TOP_N_SYMBOLS = 250;
     const BATCH_SIZE = 10;
@@ -212,7 +213,6 @@
     let currentSortColumn = 'curr_vol_chg';
     let isSortDescending = true;
 
-    // UI Elements
     const startBtn = document.getElementById('startBtn');
     const progressText = document.getElementById('progressText');
     const progressBar = document.getElementById('progressBar');
@@ -225,9 +225,9 @@
         progressBar.style.width = '0%';
         
         try {
-            // 1. Fetch 24h ticker info to rank top 250 active USDT Perpetuals
-            progressText.innerText = "Fetching active USDT Perpetual markets from Binance...";
-            const tickerRes = await fetch(`${API_BASE}/ticker/24hr`);
+            // 1. Fetch 24h ticker info to rank top 250 active USDT Perpetuals by volume
+            progressText.innerText = "Fetching active USDT Perpetual pairs from Binance...";
+            const tickerRes = await fetch(`${API_BASE}/fapi/v1/ticker/24hr`);
             const tickerData = await tickerRes.json();
             
             // Filter strictly for active USDT Perpetuals (ignore quarterly delivery symbols containing '_')
@@ -243,7 +243,6 @@
             for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
                 const batch = symbols.slice(i, i + BATCH_SIZE);
                 
-                // Concurrently query market endpoints for the batch of 10
                 const batchPromises = batch.map(symbol => scanSingleSymbol(symbol));
                 const results = await Promise.all(batchPromises);
                 
@@ -256,7 +255,7 @@
                 progressText.innerText = `Scanning: ${completed} / ${symbols.length} (${percentage}%)`;
                 progressBar.style.width = `${percentage}%`;
                 
-                // Safety delay to stay under API IP weight boundaries
+                // Small pause to keep request weight well under API rate limits
                 await new Promise(resolve => setTimeout(resolve, 80));
             }
             
@@ -264,7 +263,7 @@
             sortTable(currentSortColumn, true);
 
         } catch (error) {
-            progressText.innerText = `Error: ${error.message}`;
+            progressText.innerText = `Error during execution: ${error.message}`;
             console.error(error);
         } finally {
             startBtn.disabled = false;
@@ -273,33 +272,35 @@
 
     async function scanSingleSymbol(symbol) {
         try {
-            // Fetch candles and Open Interest concurrently for max speed
-            // Limit 7 gives us current (-1), previous (-2), and historical 5 candles (-7 to -3)
-            const klinesPromise = fetch(`${API_BASE}/klines?symbol=${symbol}&interval=${TIMEFRAME}&limit=7`).then(r => r.json());
+            // Fetch candles and Open Interest concurrently
+            // Fetch 7 candles: current (-1), previous (-2), and historical 5 candles (-7 to -3)
+            const klinesPromise = fetch(`${API_BASE}/fapi/v1/klines?symbol=${symbol}&interval=${TIMEFRAME}&limit=7`)
+                .then(r => r.ok ? r.json() : null);
             
-            // Query 1h Open Interest History (get last 2 data points to compute 1h % change)
-            const oiPromise = fetch(`${API_BASE}/openInterestHist?symbol=${symbol}&period=1h&limit=2`).then(r => r.json());
+            // Correct Binance Futures Endpoint for Open Interest Statistics
+            const oiPromise = fetch(`${API_BASE}/futures/data/openInterestHist?symbol=${symbol}&period=${TIMEFRAME}&limit=2`)
+                .then(r => r.ok ? r.json() : null);
 
             const [klines, oiData] = await Promise.all([klinesPromise, oiPromise]);
             
             if (!Array.isArray(klines) || klines.length < 7) return null;
 
-            // Structure: [OpenTime, Open, High, Low, Close, Volume, ...]
+            // Kline Structure: [OpenTime, Open, High, Low, Close, Volume, ...]
             const curr = klines[klines.length - 1];
             const prev = klines[klines.length - 2];
+            const prev_prev = klines[klines.length - 3];
             const historical5 = klines.slice(klines.length - 7, klines.length - 2);
 
             const curr_open = parseFloat(curr[1]), curr_high = parseFloat(curr[2]), curr_low = parseFloat(curr[3]), curr_close = parseFloat(curr[4]), curr_vol = parseFloat(curr[5]);
             const prev_open = parseFloat(prev[1]), prev_close = parseFloat(prev[4]), prev_vol = parseFloat(prev[5]);
-            const prev_prev = klines[klines.length - 3];
             const prev_prev_vol = parseFloat(prev_prev[5]);
 
-            // --- CONDITION 1: Current candle volume is MAX of last 5 candles ---
+            // --- CONDITION 1: Current candle volume > MAX of last 5 historical candles ---
             const histVolumes = historical5.map(c => parseFloat(c[5]));
             const maxHistVol = Math.max(...histVolumes);
             
             if (curr_vol <= maxHistVol) {
-                return null; // Stop evaluation if Condition 1 fails
+                return null; // Sequence breaks if Condition 1 fails
             }
 
             // --- CONDITION 2: Current candle color differs from previous candle color ---
@@ -307,15 +308,15 @@
             const prev_is_green = prev_close >= prev_open;
             
             if (curr_is_green === prev_is_green) {
-                return null; // Stop evaluation if Condition 2 fails
+                return null; // Sequence breaks if Condition 2 fails
             }
 
-            // --- DASHBOARD METRICS CALCULATIONS ---
-            // Price Change %
+            // --- DASHBOARD METRICS ---
+            // Price Changes (%)
             const curr_price_chg = ((curr_close - curr_open) / curr_open) * 100;
             const prev_price_chg = ((prev_close - prev_open) / prev_open) * 100;
 
-            // Volume Change %
+            // Volume Changes (%)
             const curr_vol_chg = prev_vol > 0 ? ((curr_vol - prev_vol) / prev_vol) * 100 : 0;
             const prev_vol_chg = prev_prev_vol > 0 ? ((prev_vol - prev_prev_vol) / prev_prev_vol) * 100 : 0;
 
@@ -325,15 +326,14 @@
             const upperWick = curr_high - bodyTop;
             const lowerWick = bodyBottom - curr_low;
             
-            // Lower Wick / Upper Wick ratio calculation
             let wick_ratio = 0;
             if (upperWick <= 0.00000001) {
-                wick_ratio = lowerWick > 0 ? lowerWick / 0.000001 : 1.0; // Avoid divide-by-zero
+                wick_ratio = lowerWick > 0 ? lowerWick / 0.000001 : 1.0;
             } else {
                 wick_ratio = lowerWick / upperWick;
             }
 
-            // Open Interest % Change
+            // Open Interest % Change Calculation
             let oi_chg = 0;
             if (Array.isArray(oiData) && oiData.length >= 2) {
                 const latestOI = parseFloat(oiData[oiData.length - 1].sumOpenInterest);
